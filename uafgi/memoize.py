@@ -1,7 +1,7 @@
 import functools
 import collections
-from giss.functional import *
-from giss import checksum,giutil
+from uafgi.functional import *
+from uafgi import checksum,giutil
 import os
 import pickle
 
