@@ -1,9 +1,8 @@
-from giss import ioutil,giutil,iopfile
+from uafgi import ioutil,giutil,iopfile
 import re,io,os
 import datetime
 import gdal
 from cdo import Cdo
-cdo = Cdo()
 
 """Parsers and formatters for NSIDC file sets"""
 
@@ -122,6 +121,8 @@ class tiff_to_netcdf(object):
         self.rule = makefile.add(self.run, (self.ipath,), (self.opath,))
 
     def run(self):
+        cdo = Cdo()
+
         # Set the time axis
         parameter = self.parameter
         reftime = self.reftime

@@ -1,7 +1,7 @@
 import os
 from cdo import Cdo
 from uafgi import nsidc
-from giss import giutil,cdoutil
+from uafgi import giutil,cdoutil
 
 # -------------------------------------------------------------------------
 class merge_component(object):
