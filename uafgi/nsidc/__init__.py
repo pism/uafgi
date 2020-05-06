@@ -1,67 +1,11 @@
-from uafgi import ioutil,giutil,iopfile
-import re,io,os
+from uafgi import iopfile
+import io,os
 import datetime
 import gdal
 from cdo import Cdo
 
 """Parsers and formatters for NSIDC file sets"""
 
-
-class PFile_0481(iopfile.PFile):
-
-    key_fn = lambda x: (x['source'], x['grid'], x['startdate'], x['enddate'],
-        x['parameter'], x['nominal_time'], x['version'], x['ext'])
-
-
-    def format(self, **overrides):
-        # Override self with overrides
-        pfile = giutil.merge_dicts(self, overrides)
-
-        pfile['sstartdate'] = datetime.datetime.strftime(pfile['startdate'], '%d%b%y')
-        pfile['senddate'] = datetime.datetime.strftime(pfile['enddate'], '%d%b%y')
-        pfile['snominal_time'] = '{:02d}-{:02d}-{:02d}'.format(*pfile['nominal_time'])
-        # Override ext with user-given value
-        if pfile['parameter'] == '':
-            fmt = '{source}_{grid}_{sstartdate}_{senddate}_{snominal_time}_v{version}{ext}'
-        else:
-            fmt = '{source}_{grid}_{sstartdate}_{senddate}_{snominal_time}_{parameter}_v{version}{ext}'
-
-        return fmt.format(**pfile)
-
-imonth = { 'Jan':1, 'Feb':2, 'Mar':3, 'Apr':4, 'May':5, 'Jun':6, 'Jul':7,
-    'Aug':8, 'Sep':9, 'Oct':10, 'Nov':11, 'Dec':12}
-
-
-reNSIDC_0481 = re.compile(r'(TSX|TDX)_([EWS][0-9.]+[NS])_(\d\d(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d\d)_(\d\d(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d\d)_(\d\d)-(\d\d)-(\d\d)(_(vv|vx|vy|ex|ey)?)_v([0-9.]+)(\..+)')
-
-def parse_0481(path):
-    """
-    See: https://org/data/nsidc-0481"""
-
-    dir,leaf = os.path.split(path)
-
-    match = reNSIDC_0481.match(leaf)
-    if match is None:
-        return None
-
-    sstartdate = match.group(3)
-    senddate = match.group(5)
-    ret = PFile_0481(
-        dir=dir,
-        leaf=leaf,
-        source=match.group(1),
-        grid=match.group(2),
-        startdate=datetime.datetime.strptime(sstartdate, "%d%b%y"),
-        enddate=datetime.datetime.strptime(senddate, "%d%b%y"),
-        nominal_time=(int(match.group(7)), int(match.group(8)), int(match.group(9))),
-        parameter=match.group(11),   # Could be None
-        version=match.group(12),
-        ext=match.group(13))
-
-    if ret['parameter'] is None:
-        ret['parameter'] = ''    # Don't like None for sorting
-
-    return ret
 
 # -------------------------------------------------------------
 # ---------------------------------------------------
@@ -141,6 +85,8 @@ class tiffs_to_netcdfs(object):
     """Makefile macro, convert a directory full of GeoTIFFs to NetCDF.
     idir:
         Input directory of GeoTIFF files
+    parse_fn:
+        Parses filenames of GeoTIFF files
     odir:
         Directory for output files
     filter_attrs:
@@ -155,7 +101,7 @@ class tiffs_to_netcdfs(object):
     """
 
     def __init__(
-        self, makefile, idir, odir,
+        self, makefile, idir, parse_fn, odir,
         reftime='2008-01-01', blacklist=set(), max_files=10000000,
         filter_attrs=dict()):
 
@@ -165,7 +111,7 @@ class tiffs_to_netcdfs(object):
         attrs = dict(filter_attrs.items())
         attrs['ext'] = '.tif'
         filter_fn = iopfile.filter_attrs(attrs)
-        self.pfiles_tif = iopfile.listdir(idir, parse_0481, filter_fn)
+        self.pfiles_tif = iopfile.listdir(idir, parse_fn, filter_fn)
 
         # Go through each file
         inputs = list()

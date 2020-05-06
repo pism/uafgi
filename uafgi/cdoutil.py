@@ -1,5 +1,5 @@
 import os.path
-from uaf import ioutil
+from uafgi import ioutil
 
 """Utilities for working with the Python CDO interface"""
 def _large_merge(cdo_merge_operator, input, output, tmp_files, max_merge=30, **kwargs):
