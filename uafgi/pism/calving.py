@@ -1,5 +1,7 @@
 import netCDF4
 import PISM
+import cf_units
+from uafgi import cfutil
 
 class compute(object):
 
@@ -111,14 +113,20 @@ class compute(object):
         # These two calls set internal and "human-friendly" units. Data read from a file will be
         # converted into internal units.
         # Ignore "input", long_name, internal_units, human_units, std_name, index into vector
-        ice_velocity.set_attrs("input", "x-component of ice velocity", "m / s", "m / year", "", 0)
-        ice_velocity.set_attrs("input", "y-component of ice velocity", "m / s", "m / year", "", 1)
+#        ice_velocity.set_attrs("input", "x-component of ice velocity", "m / s", "m / year", "", 0)
+#        ice_velocity.set_attrs("input", "y-component of ice velocity", "m / s", "m / year", "", 1)
+        ice_velocity.set_attrs("input", "x-component of ice velocity", "m / s", "m / s", "", 0)
+        ice_velocity.set_attrs("input", "y-component of ice velocity", "m / s", "m / s", "", 1)
 
         # Read the time variable
         with netCDF4.Dataset(self.velocity_file, 'r') as nc:
             nctime = nc.variables['time']
-            timevals = nctime[:]
+            time_units = cf_units.Unit(nctime.units, nctime.calendar)
+            sec_units = cfutil.replace_reftime_unit(time_units, 'seconds')
+            nctime_bnds_d = nc.variables[nctime.bounds]
+            time_d = nctime[:]    # Time in days
             timeattrs = [(name,nctime.getncattr(name)) for name in nctime.ncattrs()] # All attrs on time var
+            time_bnds_d = nctime_bnds_d[:]
 
         # Geometry is a struct containing a bunch of these IceModelVec instances.
         # It automatically pre-fills the constructor of Geometry, all the attributes.
@@ -139,6 +147,9 @@ class compute(object):
         # Generally, think of ice_free_thickness_standard == 0
         # ensure consistency of geometry (computes surface elevation and cell type)
         geometry.ensure_consistency(config.get_number("geometry.ice_free_thickness_standard"))
+        min_thickness = ctx.config.get_number("geometry.ice_free_thickness_standard")
+
+        print('AA2')
 
         # allocate the flow law
         flow_law_factory = PISM.FlowLawFactory(
@@ -146,33 +157,88 @@ class compute(object):
         flow_law_factory.set_default("isothermal_glen")
         flow_law = flow_law_factory.create()
 
+        print('A31')
+        bc_mask = PISM.IceModelVec2Int(grid, "bc_mask", PISM.WITH_GHOSTS)
+        bc_mask.set(0.0)
+
+        retreat_rate = PISM.IceModelVec2S(grid, "total_retreat_rate", PISM.WITHOUT_GHOSTS)
+        retreat_rate.set_attrs("output", "rate of ice front retreat", "m / s", "m / s", "", 0)
+        retreat_rate.set(0.0)
+
+        melt_rate = PISM.IceModelVec2S(grid, "frontal_melt_rate", PISM.WITHOUT_GHOSTS)
+        melt_rate.set(0.0)
+
+
         # Open the output file
         # The append_time=True argument of prepare_output determines if
         # after this call the file will contain zero (append_time=False)
         # or one (append_time=True) records.
         output = PISM.util.prepare_output(self.rule.outputs[0], append_time=False)
 
-        # Add in all the time attributes
-        for name,val in timeattrs:
-            output.write_attribute('time', name, val)
-
         try:
+            # Add in all the time attributes
+            for name,val in timeattrs:
+                output.write_attribute('time', name, val)
+
+            # allocate and initialize the calving model
+            model = PISM.CalvingvonMisesCalving(grid, flow_law)
+            model.init()
+
+            front_retreat = PISM.FrontRetreat(grid)
+
             # Run the calving model for each timestep
-            for timestep in range(0,len(timevals)):
-    #        for timestep in range(0,5):
-                print('********** Computing Calving for timestep={}'.format(timestep))
-                ice_velocity.read(self.velocity_file, timestep)   # 0 ==> first record of that file (if time-dependent)
+            for its in range(0,len(time_d)):
+                tb_d = time_bnds_d[its,:]
+                tb_s = time_units.convert(tb_d, sec_units)
+
+                ice_velocity.read(self.velocity_file, its)   # 0 ==> first record of that file (if time-dependent)
 
 
-                # allocate and initialize the calving model
-                model = PISM.CalvingvonMisesCalving(grid, flow_law)
-                model.init()
+                print('********** Computing Calving for ({} - {})'.format(time_units.num2date(time_bnds_d[its,0]), time_units.num2date(time_bnds_d[its,1])))
 
-                # compute the calving rate
-                model.update(geometry.cell_type, geometry.ice_thickness, ice_velocity, ice_enthalpy)
+                # Timestep through the time bounds (in seconds)
+                t_s = tb_s[0]
+                while t_s < tb_s[1]:
+                    print('----- t={}'.format(sec_units.num2date(t_s)))
 
-                # https://github.com/pism/pism/blob/master/site-packages/PISM/testing.py#L81-L96
-                PISM.append_time(output, 'time', timevals[timestep])
+                    # compute the calving rate
+                    model.update(
+                        geometry.cell_type, geometry.ice_thickness,
+                        ice_velocity, ice_enthalpy)
+
+                    # combine calving rate with the frontal melt rate to produce the total retreat rate
+                    retreat_rate.copy_from(model.calving_rate())
+                    retreat_rate.add(1.0, melt_rate)
+                
+
+                    # compute the maximum allowed time step length
+                    dtmax_s = front_retreat.max_timestep(
+                        geometry.cell_type,
+                        bc_mask, retreat_rate).value()
+                    print('dtmax_s = {}s ({} days)'.format(dtmax_s, dtmax_s/86400))
+                    dt_s = min(dtmax_s, tb_s[1] - t_s)
+
+                    front_retreat.update_geometry(
+                        dt_s, geometry, bc_mask, retreat_rate,
+                        geometry.ice_area_specific_volume,
+                        geometry.ice_thickness)
+                    geometry.ensure_consistency(min_thickness)
+
+                    t_s += dt_s
+
+                    # save results (could be innner or outer loop)
+                    PISM.append_time(output, "time", sec_units.convert(t_s, time_units))
+#                    ice_velocity = 1.0
+                    ice_velocity.write(output)
+
+                    model.calving_rate().set_attrs(    # Redundant
+                        "output", "vonmises_calving_rate", "m / s", "m / s", "", 0)
+                    model.calving_rate().write(output)
+
+                    retreat_rate.write(output)
+                    geometry.ice_thickness.write(output)
+
+
 
                 # Writes just a scalar: movement of the front in horizontal direction, by how much (s-1)
                 # the front retreats.  Currently, how it's used in PISM, it's computed at ice-free locations
@@ -180,7 +246,7 @@ class compute(object):
                 # PISM's parameterization of sub-grid position of the calving front.
                 # save to an output file
                 # See pism.git/site-packages/pism/util.py
-                model.calving_rate().write(output)
+                #model.calving_rate().write(output)
     #            geometry.ice_thickness.write(output)    # One more thing to write
         finally:
             output.close()
