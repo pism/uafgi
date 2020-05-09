@@ -1,8 +1,12 @@
-from uafgi import iopfile
 import io,os
 import datetime
+
+import netCDF4
 import gdal
 from cdo import Cdo
+import cf_units
+
+from uafgi import iopfile
 
 """Parsers and formatters for NSIDC file sets"""
 
@@ -54,8 +58,9 @@ class tiff_to_netcdf(object):
         sub = tiff_to_netcdf0(makefile, pfile, odir)
 
         # This deduces the mid-point (nominal) date from the filename
+        self.time_bounds = (pfile['startdate'], pfile['enddate'])
         self.nominal_date = pfile['startdate'] + (pfile['enddate'] - pfile['startdate']) / 2
-        self.reftime = reftime        
+        self.reftime = reftime
         self.parameter = pfile['parameter']
         self.ipath = sub.opath
         self.opath = os.path.join(odir, pfile.format(
@@ -68,10 +73,8 @@ class tiff_to_netcdf(object):
         cdo = Cdo()
 
         # Set the time axis
-        parameter = self.parameter
-        reftime = self.reftime
         inputs = [
-            '-setreftime,{}'.format(self.reftime),
+            '-setreftime,{}'.format(self.reftime),  # Somehow reftime is being ignored
             '-setattribute,{}@units="m year-1"'.format(self.parameter),
             '-chname,Band1,{}'.format(self.parameter),
             '{}'.format(self.ipath)]
@@ -80,6 +83,27 @@ class tiff_to_netcdf(object):
             input=' '.join(inputs),
             output=self.opath,
             options="-f nc4 -z zip_2")
+
+        # Add time bounds --- to be picked up by cdo.mergetime
+        # https://code.mpimet.mpg.de/boards/2/topics/1115
+        with netCDF4.Dataset(self.rule.outputs[0], 'a') as nc:
+            nctime = nc.variables['time']
+            timeattrs = [(name,nctime.getncattr(name)) for name in nctime.ncattrs()]
+            nc.variables['time'].bounds = 'time_bnds'
+
+            nc.createDimension('bnds', 2)
+            tbv = nc.createVariable('time_bnds', 'd', ('time', 'bnds',))
+            # These attrs don't end up in the final merged time_bnds
+            # But they do seem to be important to keep the final value correct.
+            for name,val in timeattrs:
+                tbv.setncattr(name, val)
+
+            cfu = cf_units.Unit(nctime.units, nctime.calendar)
+            for ix,time in enumerate(self.time_bounds):
+                tbv[0,ix] = cfu.date2num(time)
+
+
+
 # -------------------------------------------------------------------------
 class tiffs_to_netcdfs(object):
     """Makefile macro, convert a directory full of GeoTIFFs to NetCDF.
