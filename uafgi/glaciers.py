@@ -53,7 +53,9 @@ class merge(object):
         Directory for output files
     filter_attrs:
         File name portion (PFile) attributes used to filter files in idir.
-        Should contain at least source, grid, parameter
+        Should contain at least source, grid
+    parameters:
+        List of components ("parameter" in filter_attrs) to process.
     ofpattern:
         Format pattern used to determine output filename, including directory.
         Keys should match up with filter_attrs
@@ -91,6 +93,10 @@ class fixup_velocities_for_pism(object):
 
     def run(self):
         # Rename variables
-        cmd = ['ncrename', '-O', '-v', 'vx,u_ssa_bc', '-v', 'vy,v_ssa_bc',
+        # HINT: If presence is intended to be optional, then prefix
+        # old variable name with the period character '.', i.e.,
+        # 'ncrename -v .vy,v_ssa_bc'. With this syntax ncrename would
+        # succeed even when no such variable is in the file.
+        cmd = ['ncrename', '-O', '-v', '.vx,u_ssa_bc', '-v', '.vy,v_ssa_bc',
             self.rule.inputs[0], self.rule.outputs[0]]
         subprocess.run(cmd, check=True)
