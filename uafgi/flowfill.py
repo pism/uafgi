@@ -7,7 +7,6 @@ import scipy.ndimage
 import math
 from scipy import signal
 
-#import sys
 #np.set_printoptions(threshold=sys.maxsize)
 
 # Enumerated values describing each gridcell
@@ -25,6 +24,7 @@ def get_indexing(ndarr):
 
     ndarr:
         Numpy array for which to produce an Indexing object.
+        Must be a standard row-major Numpy array with stride=1
     Returns:
         The Indexing object for ndarr
     """
@@ -52,7 +52,8 @@ def d_dy_present(divable,dy,  indexing,  rows,cols,vals, factor=1.0, rowoffset=0
         See get_divable()
 
     indexing: uafgi.indexing.Indexing
-        Indexing object for 2D arrays 
+        Indexing object to convert between 2D and 1D indexing for the
+        data arrays
     rows,cols,vals:
         Lists to which to append (row,col,val) for each item in
         the sparse matrix being created.
@@ -67,7 +68,7 @@ def d_dy_present(divable,dy,  indexing,  rows,cols,vals, factor=1.0, rowoffset=0
         Used to create a matrix that can take a concatenated vecotr of
         [v,u] as its input.
     """
-    #indexing = get_indexing(divable)
+
     bydy = 1. / dy
 
     stcoo,stval = center_diff
@@ -86,9 +87,9 @@ def d_dy_present(divable,dy,  indexing,  rows,cols,vals, factor=1.0, rowoffset=0
 
 def d_dx_present(divable,dx, indexing,  rows,cols,vals,
     factor=1.0, rowoffset=0, coloffset=0):
-    """Adds the discretized finite difference d/dy operator,
-    (derivative in the y direction, or 0th index), to a sparse matrix.
-    See d_dy_present for arguments.
+    """Adds the discretized finite difference d/dx operator,
+    (derivative in the x direction, or 1st index), to a sparse matrix.
+    See d_dx_present for arguments.
 
     d/dx is computed by computing d/dy on the transpose of all the
     (2D) array inputs.  The Indexing object must also be
@@ -116,6 +117,7 @@ def div_matrix(d_dyx, divable, dyx, rows,cols,vals,
     gridcells involved in each part of the d/dy operator.
 
     d_dyx:
+        Functions used to compute derivatives
         Must be (d_dy_present, d_dx_present)
     divable: ndarray(bool)
         Map of which cells are avaialble to calculate 2D derivatives;
@@ -194,8 +196,11 @@ def dc_matrix(d_dyx, divable, dyx, rows,cols,vals,
 
 # -------------------------------------------------------
 def get_divable(idomain2):
-    """Returns a domain (true/false array) for which the divergence can be
-    computed, using ONLY center differences.
+
+    """Returns a domain 2D ndarray (true/false) indicating where the
+    divergence can be computed, using ONLY center differences.
+    This will be points for which all four of its neighbors have data
+    (but the central point doesn't necessarily have to have data).
 
     idomain2: ndarray(bool)
         Map of which points in the domain have data.
@@ -255,7 +260,16 @@ def get_div_curl(vvel2, uvel2, divable_data2, dyx=(1.,1.)):
     return div2,curl2
 # ----------------------------------------------------------
 def disc_stencil(radius, dyx):
-    """Creates a disc-shaped convolution stencil"""
+    """Creates a disc-shaped 2D convolution stencil
+    Size of the 2D stencil will be 2*radius x 2*radius
+
+    radius: [m]
+        Radius of the disc to create
+    dyx: (dy,dx) [m]
+        Grid spacing in y and x direction
+    Returns:
+        ndarray (float32) that is 1 inside a disc, and 0 elsewhere.
+    """
 
     shape = tuple(math.ceil(radius*2. / dyx[i]) for i in range(0,2))
     st = np.zeros(shape, dtype='float32')
@@ -270,7 +284,23 @@ def disc_stencil(radius, dyx):
 
 def get_dmap(values, thk, threshold, dist_channel, dist_front, dyx):
     """Creates a domain of gridcells within distance of cells in amount2
-    that are >= threshold."""
+    that are >= threshold.
+
+    has_data: (2D bool)
+        Points that have U/V velocities available.
+        has_data = np.logical_not(np.isnan(values))
+    thk: (2D)
+        Ice thickness
+    threshold:
+        Threshold to define edge of main channel by rapid changes in
+        Sobel-filtered values of thk.
+    dist_channel:
+        Distance from the edge of the channel to include in domain
+    dist_front:
+        Distance from the glacier front to include in the domain
+    dyx: (dy,dx)
+        Grid spacing
+    """
 
     # Sobel-filter the amount variable
     sx = scipy.ndimage.sobel(thk, axis=0)
@@ -287,9 +317,6 @@ def get_dmap(values, thk, threshold, dist_channel, dist_front, dyx):
     # Create domain of points close to original data points
     domain = (signal.convolve2d(domain0, stencil, mode='same') != 0)
 
-    # Points with data
-    data = (np.logical_not(np.isnan(values)))
-
     # Points close to the calving front
     # Get maximum value of Sobel fill.  This will be an ice cliff,
     # somewhere on the calving front.
@@ -301,9 +328,8 @@ def get_dmap(values, thk, threshold, dist_channel, dist_front, dyx):
     # Create the dmap
     dmap = np.zeros(thk.shape, dtype='i') + D_UNUSED
     dmap[domain] = D_MISSING
-    dmap[data] = D_DATA
+    dmap[has_data] = D_DATA
     dmap[np.logical_not(domain)] = D_UNUSED
-#    dmap[:] = D_DATA
 
     # Focus on area near calving front
     dthresh = dist_front*dist_front
@@ -321,8 +347,22 @@ def get_dmap(values, thk, threshold, dist_channel, dist_front, dyx):
 
 # ----------------------------------------------------------
 def reduce_column_rank(cols):
+    """Reduce the column rank of a sparse matrix by renumbering columns to
+    eliminate empty columns.
+
+    cols:
+        Column of each element in the CSS-format version of the sparse matrix.
+
+    Returns:
+        cols_s:
+            List of renumbered columns
+        mvs_cols: list
+            Convert renumbered columns back to originals.  i.e.:
+                mvs_cols[cols_s[i]] == cols[i]
+    """
+
     col_set = dict((c,None) for c in cols)    # Keep order
-    print('len(col_set) = {} -> {}'.format(len(cols), len(col_set)))
+    #print('len(col_set) = {} -> {}'.format(len(cols), len(col_set)))
     mvs_cols = list(col_set.keys())
     svm_cols = dict((c,i) for i,c in enumerate(mvs_cols))
     cols_d = [svm_cols[c_s] for c_s in cols]
@@ -330,8 +370,26 @@ def reduce_column_rank(cols):
     return cols_d,mvs_cols
 
 def reduce_row_rank(rows, bb):
+    """Reduce the row rank of a sparse matrix by renumbering rows to
+    eliminate empty rows.
+
+    rows:
+        Row of each element in the CSS-format version of the sparse matrix.
+    bb:
+        The right-hand side vector (as a list)
+
+    Returns:
+        rows_s:
+            List of renumbered rows
+        bb_d:
+            Renumbered right-hand side
+        mvs_rows: list
+            Convert renumbered rows back to originals.  i.e.:
+                mvs_rows[rows_s[i]] == rows[i]
+    """
+
     row_set = dict((c,None) for c in rows)    # Keep order
-    print('len(row_set) = {} -> {}'.format(len(rows), len(row_set)))
+
     mvs_rows = list(row_set.keys())
     svm_rows = dict((c,i) for i,c in enumerate(mvs_rows))
     rows_d = [svm_rows[c_s] for c_s in rows]
@@ -341,21 +399,26 @@ def reduce_row_rank(rows, bb):
 
 # ----------------------------------------------------------
 def fill_flow(vvel2, uvel2, dmap, clear_divergence=False, prior_weight=0.8):
-    """
-    vvel, uvel: ndarray(j,i)
-        Volumetric flow fields (should have divergence=0)
-    data_map: ndarray(j,i, dtype=bool)
-        True where there is data, False elsewhere
-    ice_map:
-        True where there is ice, False elsewhere
+    """Fills in missing values in a (theoretically divergence-free
+    velocity field.
+
+    vvel2, uvel2: ndarray(j,i)
+        Volumetric flow fields (should have divergence=0 in theory)
+    dmap: ndarray(j,i, dtype=int)
+        Status of each gridcell.  See get_dmap()
+        Gridcells set to D_MISSING will be filled in.
     clear_divergence:
         if True, zero out the divergence when filling.
         Otherwise, just Poisson-fill existing (non-zero) divergence.
     prior_weight: 0-1
         The amount to weight rows that pin values to the origianl data.
 
-    Returns: vvel_filled, uvel_filled, diagnostics
-        Filled versions of vvel2, uvel2
+    Returns:
+        vvel_filled, uvel_filled:
+            Filled versions of vvel2, uvel2
+        diagnostics: {label: ndarray(j,i)}
+            Intermediate values, for inspection
+
     """
 
     diagnostics = dict()
@@ -400,7 +463,6 @@ def fill_flow(vvel2, uvel2, dmap, clear_divergence=False, prior_weight=0.8):
     # --------- Setup domain to compute filled-in data EVERYWHERE
     # This keeps the edges of the domain as far as possible from places where
     # "the action" happens.  Edge effects can cause stippling problems.
-#    divable_used2 = np.ones(data_map.shape, dtype=bool)
     divable_used2 = (dmap != D_UNUSED)
     # Make a bezel around the edge
     divable_used2[0,:] = False
@@ -454,9 +516,6 @@ def fill_flow(vvel2, uvel2, dmap, clear_divergence=False, prior_weight=0.8):
     cols_d,mvs_cols = reduce_column_rank(cols)    # len(cols)==n1*2
     nrows_s = len(bb)
     rows_d,bb_d,mvs_rows = reduce_row_rank(rows, bb)
-#    rows_d = rows
-#    bb_d = bb
-#    mvs_rows = list(range(0,len(bb)))
 
     # ---------- Convert to SciPy Sparse Matrix Format
     M = scipy.sparse.coo_matrix((vals, (rows_d,cols_d)),
@@ -479,28 +538,31 @@ def fill_flow(vvel2, uvel2, dmap, clear_divergence=False, prior_weight=0.8):
     return vv3, uu3, diagnostics
 
 def fill_surface_flow(vsvel2, usvel2, amount2, dmap, clear_divergence=False, prior_weight=0.8):
-    """
+    """Fills in missing vlaues in a surface velocity field (not really
+    divergence-free).
+
     vsvel2, usvel2: np.array(j,i)
         Surface velocities
-    amount2: np.array(j,i)
-        Ice depth; multiply surface velocity by this to get volumetric velocity
     amount2:
         Multiply surface velocity by this to get volumetric velocity
         Generally, could be depth of ice.
         (whose divergence should be 0)
-    data_map: ndarray(j,i, dtype=bool)
-        True where there is data, False elsewhere
+    dmap: ndarray(j,i, dtype=int)
+        Status of each gridcell.  See get_dmap()
+        Gridcells set to D_MISSING will be filled in.
     clear_divergence:
         if True, zero out the divergence when filling.
         Otherwise, just Poisson-fill existing (non-zero) divergence.
     prior_weight: 0-1
         The amount to weight rows that pin values to the origianl data.
 
-    Returns: vvs3, uus3, (vvel2, uvel2, vvel_filled, uvel_filled)
+    Returns: vvs3, uus3, diagnostics
         vvs3, uus3:
             Final filled and smothed surface velocities
 
-        Intermediate values...
+        diagnostics {label: ndarray} is intermediate values:
+        (vvel2, uvel2, vvel_filled, uvel_filled)
+
         vvel2,uvel2:
             Original non-filled volumetric velocities
         vvel_filled, uvel_filled:
@@ -509,7 +571,6 @@ def fill_surface_flow(vsvel2, usvel2, amount2, dmap, clear_divergence=False, pri
     """
 
     diagnostics = dict()
-
 
     # Get volumetric velocity from surface velocity
     vvel2 = vsvel2 * amount2
