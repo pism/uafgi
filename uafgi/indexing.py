@@ -69,5 +69,8 @@ class Indexing(object):
         return tuple(tpl)
 
     def transpose(self):
+        """Produces an indexing object for a transposed version of the array
+        to which the original indexing object applies."""
+
         return Indexing(np.flipud(self.base), np.flipud(self.extent), np.flipud(self.indices))
 
