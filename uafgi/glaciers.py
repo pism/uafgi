@@ -82,7 +82,7 @@ class merge(object):
             output=self.rule.outputs[0],
             options="-f nc4 -z zip_2")
 # -------------------------------------------------------------------------
-class fixup_velocities_for_pism(object):
+class rename_velocities_for_pism(object):
     """Fixup merged velocity file
     ipath:
         Name of merged velocity file

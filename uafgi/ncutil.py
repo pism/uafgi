@@ -23,7 +23,7 @@ import shutil
 # Copy a netCDF file (so we can add more stuff to it)
 class copy_nc(object):
     def __init__(self, nc0, ncout,
-        attrib_filter = lambda x : True):
+        attrib_filter = lambda x : x != '_FillValue'):
         """attrib_filter : function(attrib_name) -> bool
             Only copy attributes where this filter returns True."""
         self.nc0 = nc0
@@ -78,6 +78,10 @@ class copy_nc(object):
         # Define the variables
         for ivname,ovname in var_pairs:
             var = self.nc0.variables[ivname]
+            kwargs1 = dict(kwargs.items())
+            if hasattr(var, '_FillValue'):
+                FillValue = var._FillValue
+                kwargs1['fill_value'] = FillValue
             varout = self.ncout.createVariable(ovname, var.dtype, var.dimensions, **kwargs)
             for aname in var.ncattrs():
                 if not self.attrib_filter(aname) : continue
@@ -87,7 +91,9 @@ class copy_nc(object):
         var_pairs = self.nc0.variables.keys()
         self.define_vars(var_pairs, **kwargs)
 
-    def copy_var(self, ivname, ovname):
+    def copy_var(self, ivname, ovname=None):
+        if ovname is None:
+            ovname = ivname
 
         print('Copying {}'.format(ivname))
         ivar = self.nc0.variables[ivname]

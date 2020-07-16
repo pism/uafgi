@@ -1,3 +1,4 @@
+import netCDF4
 import scipy.sparse.linalg
 import scipy.sparse
 import numpy as np
@@ -6,6 +7,8 @@ import uafgi.indexing
 import scipy.ndimage
 import math
 from scipy import signal
+from uafgi import make
+from uafgi import ncutil
 
 #np.set_printoptions(threshold=sys.maxsize)
 
@@ -282,7 +285,7 @@ def disc_stencil(radius, dyx):
     return st
 
 
-def get_dmap(values, thk, threshold, dist_channel, dist_front, dyx):
+def get_dmap(has_data, thk, threshold, dist_channel, dist_front, dyx):
     """Creates a domain of gridcells within distance of cells in amount2
     that are >= threshold.
 
@@ -604,4 +607,103 @@ def fill_surface_flow(vsvel2, usvel2, amount2, dmap, clear_divergence=False, pri
 
 
     return vvs4, uus4, diagnostics
+# -------------------------------------------------------
+
+class fill_surface_flow_rule(object):
+    def __init__(self, makefile, ipath, bedmachine_path, odir):
+        self.rule = makefile.add(self.run,
+            (ipath,bedmachine_path), (make.opath(ipath, odir, '_filled'),))
+
+    def run(self):
+
+
+        # ------------ Read amount of ice (thickness)
+        # 'outputs/bedmachine/W69.10N-thickness.nc'
+        with netCDF4.Dataset(self.rule.inputs[1]) as nc:
+            thk2 = nc.variables['thickness'][:].astype(np.float64)
+
+        # Filter thickness, it's from a lower resolution
+        thk2 = scipy.ndimage.gaussian_filter(thk2, sigma=2.0)
+
+        # Amount is in units [kg m-2]
+        rhoice = 918.    # [kg m-3]: Convert thickness from [m] to [kg m-2]
+        amount2 = thk2 * rhoice
+
+
+        # ========================= Read Data from Input Files
+        # --------- Read uvel and vvel
+        t = 0    # Time
+        # 'outputs/velocity/TSX_W69.10N_2008_2020_pism.nc'
+        with netCDF4.Dataset(self.rule.inputs[0]) as nc:
+
+            # Create the output file by copying the structure of the input file
+            with netCDF4.Dataset(self.rule.outputs[0], 'w') as ncout:
+
+                cnc = ncutil.copy_nc(nc, ncout)
+                cnc.createDimension('time', size=0)    # Unlimited
+#                var_pairs = dict((x,x) for x in nc.variables.keys())
+#                del var_pairs['v_ssa_bc']
+#                del var_pairs['u_ssa_bc']
+#                cnc.define_vars(var_pairs.items())
+                cnc.define_all_vars(zlib=True)
+
+                for vname in ('x', 'y', 'time', 'time_bnds'):
+                    cnc.copy_var(vname, vname)
+
+            # Now process / copy the data
+            for t in range(0,len(nc.dimensions['time'])):
+                print('============== Timestep t={}'.format(t))
+
+                nc_vvel = nc.variables['v_ssa_bc']
+                nc_vvel.set_auto_mask(False)
+                vsvel2 = nc_vvel[t,:].astype(np.float64)
+                vsvel2[vsvel2 == nc_vvel._FillValue] = np.nan
+
+                nc_uvel = nc.variables['u_ssa_bc']
+                nc_uvel.set_auto_mask(False)    # Don't use masked arrays
+                usvel2 = nc_uvel[t,:].astype(np.float64)
+                usvel2[usvel2 == nc_uvel._FillValue] = np.nan
+
+                print('Fill Value {}'.format(nc_uvel._FillValue))
+
+
+                # ------------ Set up the domain map (classify gridcells)
+                has_data = np.logical_not(np.isnan(vsvel2))
+                dmap = get_dmap(has_data, thk=thk2, threshold=300.,
+                    dist_channel=3000., dist_front=20000., dyx=(100.,100.))
+
+            #    with netCDF4.Dataset('dmap.nc', 'w') as nc:
+            #        nc.createDimension('y', vsvel2.shape[0])
+            #        nc.createDimension('x', vsvel2.shape[1])
+            #        nc.createVariable('amount', 'd', ('y','x'))[:] = amount2
+            #        nc.createVariable('dmap', 'd', ('y','x'))[:] = dmap
+
+                # ----------- Store it
+                vv3,uu3,diagnostics = fill_surface_flow(vsvel2, usvel2, amount2, dmap,
+                    clear_divergence=True, prior_weight=0.8)
+                diagnostics['thk'] = thk2
+                diagnostics['dmap'] = dmap
+
+                with netCDF4.Dataset(self.rule.outputs[0], 'a') as ncout:
+
+                    ncout.variables['v_ssa_bc'][t,:] = vv3
+                    ncout.variables['u_ssa_bc'][t,:] = uu3
+
+
+#                    # ----------- Store it
+#                    nc.createDimension('y', vsvel2.shape[0])
+#                    nc.createDimension('x', vsvel2.shape[1])
+#                    nc.createVariable('vsvel', 'd', ('y','x'))[:] = vsvel2
+#                    nc.createVariable('usvel', 'd', ('y','x'))[:] = usvel2
+#                    nc.createVariable('amount', 'd', ('y','x'))[:] = amount2
+#
+#                    nc.createVariable('vsvel_filled', 'd', ('y','x'))[:] = vv3
+#                    nc.createVariable('usvel_filled', 'd', ('y','x'))[:] = uu3
+#
+#                    nc.createVariable('vsvel_diff', 'd', ('y','x'))[:] = vv3-vsvel2
+#                    nc.createVariable('usvel_diff', 'd', ('y','x'))[:] = uu3-usvel2
+#
+#                    for vname,val in diagnostics.items():
+#                        nc.createVariable(vname, 'd', ('y','x'))[:] = val
+
 

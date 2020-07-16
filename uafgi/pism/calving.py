@@ -72,7 +72,9 @@ class compute(object):
 
         """
         self.geometry_file = geometry_file
+        print('geometry_file = {}'.format(self.geometry_file))
         self.velocity_file = velocity_file
+        print('velocity_file = {}'.format(self.velocity_file))
         self.grid_fivar = grid_fivar
         self.ice_softness = ice_softness
         self.rule = makefile.add(self.run,
@@ -113,11 +115,13 @@ class compute(object):
         # These two calls set internal and "human-friendly" units. Data read from a file will be
         # converted into internal units.
         # Ignore "input", long_name, internal_units, human_units, std_name, index into vector
-#        ice_velocity.set_attrs("input", "x-component of ice velocity", "m / s", "m / year", "", 0)
-#        ice_velocity.set_attrs("input", "y-component of ice velocity", "m / s", "m / year", "", 1)
-        ice_velocity.set_attrs("input", "x-component of ice velocity", "m / s", "m / s", "", 0)
-        ice_velocity.set_attrs("input", "y-component of ice velocity", "m / s", "m / s", "", 1)
+        ice_velocity.set_attrs("input", "x-component of ice velocity", "m / s", "m / year", "", 0)
+        ice_velocity.set_attrs("input", "y-component of ice velocity", "m / s", "m / year", "", 1)
+#        ice_velocity.set_attrs("input", "x-component of ice velocity", "m / s", "m / s", "", 0)
+#        ice_velocity.set_attrs("input", "y-component of ice velocity", "m / s", "m / s", "", 1)
 
+
+# --- This was not in Constantin'es original script
         # Read the time variable
         with netCDF4.Dataset(self.velocity_file, 'r') as nc:
             nctime = nc.variables['time']
@@ -127,6 +131,7 @@ class compute(object):
             time_d = nctime[:]    # Time in days
             timeattrs = [(name,nctime.getncattr(name)) for name in nctime.ncattrs()] # All attrs on time var
             time_bnds_d = nctime_bnds_d[:]
+# -----------
 
         # Geometry is a struct containing a bunch of these IceModelVec instances.
         # It automatically pre-fills the constructor of Geometry, all the attributes.
@@ -146,8 +151,9 @@ class compute(object):
         # using it to compute surface elevation and cell type.
         # Generally, think of ice_free_thickness_standard == 0
         # ensure consistency of geometry (computes surface elevation and cell type)
-        geometry.ensure_consistency(config.get_number("geometry.ice_free_thickness_standard"))
+#        geometry.ensure_consistency(config.get_number("geometry.ice_free_thickness_standard"))
         min_thickness = ctx.config.get_number("geometry.ice_free_thickness_standard")
+        geometry.ensure_consistency(min_thickness)
 
         print('AA2')
 
@@ -157,6 +163,7 @@ class compute(object):
         flow_law_factory.set_default("isothermal_glen")
         flow_law = flow_law_factory.create()
 
+####
         print('A31')
         bc_mask = PISM.IceModelVec2Int(grid, "bc_mask", PISM.WITH_GHOSTS)
         bc_mask.set(0.0)
@@ -165,6 +172,7 @@ class compute(object):
         retreat_rate.set_attrs("output", "rate of ice front retreat", "m / s", "m / s", "", 0)
         retreat_rate.set(0.0)
 
+        # For now, assume no frontal melting
         melt_rate = PISM.IceModelVec2S(grid, "frontal_melt_rate", PISM.WITHOUT_GHOSTS)
         melt_rate.set(0.0)
 
@@ -209,13 +217,13 @@ class compute(object):
                     # combine calving rate with the frontal melt rate to produce the total retreat rate
                     retreat_rate.copy_from(model.calving_rate())
                     retreat_rate.add(1.0, melt_rate)
-                
+
 
                     # compute the maximum allowed time step length
                     dtmax_s = front_retreat.max_timestep(
                         geometry.cell_type,
                         bc_mask, retreat_rate).value()
-                    print('dtmax_s = {}s ({} days)'.format(dtmax_s, dtmax_s/86400))
+                    print('dtmax_s = {}s ({} days)'.format(dtmax_s, dtmax_s/86400.))
                     dt_s = min(dtmax_s, tb_s[1] - t_s)
 
                     front_retreat.update_geometry(
@@ -232,7 +240,7 @@ class compute(object):
                     ice_velocity.write(output)
 
                     model.calving_rate().set_attrs(    # Redundant
-                        "output", "vonmises_calving_rate", "m / s", "m / s", "", 0)
+                        "output", "vonmises_calving_rate", "m/s", "m/year", "", 0)
                     model.calving_rate().write(output)
 
                     retreat_rate.write(output)
