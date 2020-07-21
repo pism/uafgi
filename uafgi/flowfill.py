@@ -610,7 +610,8 @@ def fill_surface_flow(vsvel2, usvel2, amount2, dmap, clear_divergence=False, pri
 # -------------------------------------------------------
 
 class fill_surface_flow_rule(object):
-    def __init__(self, makefile, ipath, bedmachine_path, odir):
+    def __init__(self, makefile, ipath, bedmachine_path, odir, max_timesteps=None):
+        self.max_timesteps = max_timesteps
         self.rule = makefile.add(self.run,
             (ipath,bedmachine_path), (make.opath(ipath, odir, '_filled'),))
 
@@ -652,6 +653,10 @@ class fill_surface_flow_rule(object):
 
             # Now process / copy the data
             for t in range(0,len(nc.dimensions['time'])):
+
+                if (self.max_timesteps is not None) and (t >= self.max_timesteps):
+                    break
+
                 print('============== Timestep t={}'.format(t))
 
                 nc_vvel = nc.variables['v_ssa_bc']
