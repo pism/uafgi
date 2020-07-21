@@ -2,6 +2,7 @@ import os,subprocess
 import netCDF4
 from uafgi import make
 from uafgi.make import ncmake
+import re
 
 class extract(object):
 
@@ -15,12 +16,16 @@ class extract(object):
         Any old file with x(x) and y(y) coordinate variables
     """
     def __init__(self, makefile, grid, global_bedmachine_path, data_path, odir):
+        self.vnames = ('thickness', 'bed')
+        outputs = list()
+        for vname in self.vnames:
+            ofname = make.opath(global_bedmachine_path, odir, '_'+grid+'_'+vname)
+            ofname = os.path.splitext(ofname)[0] + '.nc'
+            outputs.append(ofname)
 
-        ofname = make.opath(global_bedmachine_path, odir, '_'+grid)
-        ofname = os.path.splitext(ofname)[0] + '.nc'
         self.rule = makefile.add(self.run,
             (global_bedmachine_path, data_path),
-            (ofname,))
+            outputs)
 
     def run(self):
 
@@ -44,19 +49,33 @@ class extract(object):
         #    NETCDF:outputs/bedmachine/BedMachineGreenland-2017-09-20_pism.nc4:thickness
         #    ./out4.nc
 
-        self.cmd = ['gdal_translate',
-            '-r', 'average',
-            '-projwin', str(x0), str(y1), str(x1), str(y0),
-            '-tr', str(dx), str(dy),
-            'NETCDF:' + self.rule.inputs[0] + ':thickness',
-            self.rule.outputs[0]]
+        for ix,vname in enumerate(self.vnames):
+            self.cmd = ['gdal_translate',
+                '-r', 'average',
+                '-projwin', str(x0), str(y1), str(x1), str(y0),
+                '-tr', str(dx), str(dy),
+                'NETCDF:' + self.rule.inputs[0] + ':'+vname,
+                self.rule.outputs[0+ix]]
 
 
-        print('*********** ', ' '.join(self.cmd))
-        subprocess.run(self.cmd, check=True)
+            print('*********** ', ' '.join(self.cmd))
+            subprocess.run(self.cmd, check=True)
 
 
+trimRE = re.compile(r'(.*)_([^_]*)(\..*)')
+class merge(object):
+    """Merges variables of two BedMachine files produced by extract(), into one."""
+    def __init__(self, makefile, inputs, odir):
+        ofname = make.opath(inputs[0], odir, '')
+        match = trimRE.match(ofname)
+        ofname = match.group(1) + match.group(3)
+        self.rule = makefile.add(self.run,
+            inputs, (ofname,))
 
+    def run(self):
+        cmd = ['cdo', 'merge'] + list(self.rule.inputs) + list(self.rule.outputs)
+        subprocess.run(cmd, check=True)
+        
 
 class fixup_pism0(object):
     """Fixup bedmachine file for use as PISM input file
