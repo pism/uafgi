@@ -4,7 +4,7 @@ import cf_units
 cfdateRE = re.compile(r'([^\s]*)(\s+since\s+.*)')
 def replace_reftime_unit(unit, relname='seconds'):
     """Given a reftime unit (eg: 'days since 2000-12-01'), creates a new unit
-    with the same reference time but different units (eg: 'days since 2000-12-01')
+    with the same reference time but different units (eg: 'minutes since 2000-12-01')
 
     relname:
         Name of new relative unit to use (eg: 'seconds', 'days', etc)

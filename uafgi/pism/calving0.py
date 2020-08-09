@@ -14,6 +14,7 @@ positive in the ice-covered area. The enthalpy value does not matter.
 """
 
 import PISM
+from uafgi import argutil
 
 def create_grid(ctx, filename, variable_name):
     """Create a shallow (2 vertical levels) computational grid by
@@ -47,11 +48,24 @@ def init_velocity(grid, filename, record_index=0):
     ice_velocity = PISM.model.create2dVelocityVec(grid, "_ssa_bc", stencil_width=2)
     ice_velocity.read(filename, record_index)
 
+    # These two calls set internal and "human-friendly" units. Data read from a file will be
+    # converted into internal units.
+    # Ignore "input", long_name, internal_units, human_units, std_name, index into vector
+    ice_velocity.set_attrs("input", "x-component of ice velocity", "m / s", "m / year", "", 0)
+    ice_velocity.set_attrs("input", "y-component of ice velocity", "m / s", "m / year", "", 1)
+#    ice_velocity.set_attrs("input", "x-component of ice velocity", "m / s", "m / s", "", 0)
+#    ice_velocity.set_attrs("input", "y-component of ice velocity", "m / s", "m / s", "", 1)
+
     return ice_velocity
 
 class FrontEvolution(object):
 
-    def __init__(self, grid, ice_softness=3.1689e-24, sigma_max=1e6):
+    default_kwargs = dict(
+        ice_softness=3.1689e-24, sigma_max=1e6, max_ice_speed=5e-4)
+
+    def __init__(self, grid, **kwargs0):
+        self.kwargs = argutil.select_kwargs(kwargs0, self.default_kwargs)
+
         self.grid = grid
         self.ctx = grid.ctx()
         self.config = grid.ctx().config()
@@ -87,7 +101,7 @@ class FrontEvolution(object):
         self.retreat_rate = PISM.IceModelVec2S(grid, "total_retreat_rate", PISM.WITHOUT_GHOSTS)
         self.retreat_rate.set_attrs("output", "rate of ice front retreat", "m / s", "m / day", "", 0)
 
-        self.calving_model = self.create_calving_model(grid, ice_softness, sigma_max)
+        self.calving_model = self.create_calving_model(grid, self.kwargs['ice_softness'], self.kwargs['sigma_max'])
 
         self.retreat_model = PISM.FrontRetreat(grid)
 
@@ -112,17 +126,17 @@ class FrontEvolution(object):
                 if not speed < huge_value:
                     bc_mask[i, j] = 1
 
-    def run(self, geometry, ice_velocity, run_length, report_filename=None):
+    def __call__(self, geometry, ice_velocity, run_length, output=None):
         """Perform a number of steps of the mass continuity equation and the
         calving parameterization to evolve ice geometry.
 
         """
         day_length = 86400.0
 
-        if report_filename is not None:
-            output = PISM.util.prepare_output(report_filename, append_time=False)
-        else:
-            output = None
+#        if report_filename is not None:
+#            output = PISM.util.prepare_output(report_filename, append_time=False)
+#        else:
+#            output = None
 
         # create a copy of the velocity field. This copy will be
         # modified to cap ice speeds.
@@ -133,7 +147,7 @@ class FrontEvolution(object):
         self.set_bc_mask(self.ice_velocity, self.bc_mask)
 
         # Cap ice speed at ~15.8 km/year (5e-4 m/s).
-        self.cap_ice_speed(self.ice_velocity, valid_max=5e-4)
+        self.cap_ice_speed(self.ice_velocity, valid_max=self.kwargs['max_ice_speed'])
 
         t = 0.0
         while t < run_length:
@@ -161,15 +175,17 @@ class FrontEvolution(object):
 
             print(f"{t/day_length:.2f}, dt = {dt:.2f} (s) or {dt/day_length:2.2f} days")
 
-            self.advance_model.flow_step(geometry, dt, self.ice_velocity,
-                                         self.sia_flux, self.bc_mask)
+            self.advance_model.flow_step(
+                geometry, dt, self.ice_velocity,
+                self.sia_flux, self.bc_mask)
             self.advance_model.apply_flux_divergence(geometry)
 
             geometry.ensure_consistency(self.min_thickness)
 
-            self.retreat_model.update_geometry(dt, geometry, self.bc_mask, self.retreat_rate,
-                                               geometry.ice_area_specific_volume,
-                                               geometry.ice_thickness)
+            self.retreat_model.update_geometry(
+                dt, geometry, self.bc_mask, self.retreat_rate,
+                geometry.ice_area_specific_volume,
+                geometry.ice_thickness)
 
             # re-compute the cell type mask using 0 as the threshold
             # to clean up *all* icebergs, no matter how thin
@@ -182,6 +198,7 @@ class FrontEvolution(object):
 
             geometry.ensure_consistency(self.min_thickness)
 
+
             if output:
                 PISM.append_time(output, self.config, t)
 
@@ -191,9 +208,6 @@ class FrontEvolution(object):
                 self.advance_model.flux_divergence().write(output)
 
             t += dt
-
-        if output:
-            output.close()
 
     def cap_ice_speed(self, array, valid_max):
         "Cap velocity at valid_max"
@@ -277,6 +291,8 @@ if __name__ == "__main__":
 
     run_length_days = 120
 
-    front_evolution.run(geometry, ice_velocity,
+    output = PISM.util.prepare_output(report_filename, append_time=False)
+
+    front_evolution(geometry, ice_velocity,
                         run_length=run_length_days * 86400,
                         report_filename="test.nc")
