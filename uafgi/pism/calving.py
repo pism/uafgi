@@ -119,6 +119,7 @@ class compute(object):
 
 # --- This was not in Constantin'es original script
         # Read the time variable
+        print('vvvvelocity ',self.velocity_file)
         with netCDF4.Dataset(self.velocity_file, 'r') as nc:
             nctime = nc.variables['time']
             time_units = cf_units.Unit(nctime.units, nctime.calendar)

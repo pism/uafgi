@@ -29,6 +29,9 @@ def _large_merge(cdo_merge_operator, input, output, tmp_files, max_merge=30, **k
                 except FileNotFoundError:
                     pass
     else:
+#        print('CDO Merge')
+#        print('INPUT ',input)
+#        print('OUTPUT ',output)
         cdo_merge_operator(input=input, output=output, **kwargs)
 
 

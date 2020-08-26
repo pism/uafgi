@@ -73,7 +73,8 @@ class merge(object):
             inputs, (ofname,))
 
     def run(self):
-        cmd = ['cdo', 'merge'] + list(self.rule.inputs) + list(self.rule.outputs)
+        # -O flag forces overwrite
+        cmd = ['cdo', '-O', 'merge'] + list(self.rule.inputs) + list(self.rule.outputs)
         subprocess.run(cmd, check=True)
         
 
