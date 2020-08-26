@@ -49,6 +49,25 @@ class Makefile(object):
                 self.rules[output] = rule
         return rule
 
+    def format(self):
+        """Converts to a (very long) string"""
+
+        # uniq-ify the rules, keep the same order
+        uniq_rules = dict()
+        for rule in self.rules.values():
+            if id(rule) not in uniq_rules:
+                uniq_rules[id(rule)] = rule
+        # Scan...
+        out = list()
+        for rule in uniq_rules.values():
+            out.append('========================== {}'.format(rule.action))
+            for file in rule.inputs:
+                out.append('  I {}'.format(file))
+            for file in rule.outputs:
+                out.append('  O {}'.format(file))
+
+        return '\n'.join(out)
+
 class build(object):
     def __init__(self, makefile, targets):
         self.makefile = makefile
