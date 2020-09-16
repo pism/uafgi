@@ -305,6 +305,13 @@ def get_dmap(has_data, thk, threshold, dist_channel, dist_front, dyx):
         Grid spacing
     """
 
+
+    with netCDF4.Dataset('thk.nc', 'w') as nc:
+        nc.createDimension('y', thk.shape[0])
+        nc.createDimension('x', thk.shape[1])
+        nc.createVariable('thk', 'd', ('y','x'))[:] = thk
+
+
     # Sobel-filter the amount variable
     sx = scipy.ndimage.sobel(thk, axis=0)
     sy = scipy.ndimage.sobel(thk, axis=1)
@@ -319,6 +326,8 @@ def get_dmap(has_data, thk, threshold, dist_channel, dist_front, dyx):
 
     # Create domain of points close to original data points
     domain = (signal.convolve2d(domain0, stencil, mode='same') != 0)
+    if np.sum(np.sum(domain)) == 0:
+        raise ValueError('Nothing found in the domain, something is wrong...')
 
     # Points close to the calving front
     # Get maximum value of Sobel fill.  This will be an ice cliff,
@@ -329,6 +338,7 @@ def get_dmap(has_data, thk, threshold, dist_channel, dist_front, dyx):
     front_center = (fc[0]*dyx[0], fc[1]*dyx[1])
 
     # Create the dmap
+#    print('n domain = {} {} has_data = {}'.format(np.sum(np.sum(domain0)), , np.sum(np.sum(has_data))))
     dmap = np.zeros(thk.shape, dtype='i') + D_UNUSED
     dmap[domain] = D_MISSING
     dmap[has_data] = D_DATA
@@ -599,11 +609,20 @@ def fill_surface_flow(vsvel2, usvel2, amount2, dmap, clear_divergence=False, pri
     uus3 = scipy.ndimage.gaussian_filter(uus3, sigma=1.0)
 
     # Create pastiche of original + new
-    missing2 = np.isnan(vsvel2)
-    vvs4 = np.copy(vsvel2)
-    vvs4[missing2] = vvs3[missing2]
-    uus4 = np.copy(usvel2)
-    uus4[missing2] = uus3[missing2]
+    if True:
+        # Prefer new over original, to maintain continuity of flow in simulations
+        missing2 = np.isnan(vvs3)
+        vvs4 = np.copy(vvs3)
+        vvs4[missing2] = usvel2[missing2]
+        uus4 = np.copy(uus3)
+        uus4[missing2] = usvel2[missing2]
+    else:
+        # Prefer original over new, to presere original data
+        missing2 = np.isnan(vsvel2)
+        vvs4 = np.copy(vsvel2)
+        vvs4[missing2] = vvs3[missing2]
+        uus4 = np.copy(usvel2)
+        uus4[missing2] = uus3[missing2]
 
 
     return vvs4, uus4, diagnostics
@@ -620,6 +639,7 @@ class fill_surface_flow_rule(object):
 
         # ------------ Read amount of ice (thickness)
         # 'outputs/bedmachine/W69.10N-thickness.nc'
+#        print('Getting thk from {}'.format(self.rule.inputs[1]))
         with netCDF4.Dataset(self.rule.inputs[1]) as nc:
             thk2 = nc.variables['thickness'][:].astype(np.float64)
 
