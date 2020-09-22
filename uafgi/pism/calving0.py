@@ -243,6 +243,9 @@ class FrontEvolution(object):
         """Create and initialize the calving model using the isothermal Glen
         flow law with a given ice softness.
 
+        sigma_max:
+            von Mises calving stress threshold
+            See: https://github.com/pism/pism/blob/44db29423af6bdab2b5c990d08793010b2476cc5/doc/sphinx/manual/modeling-choices/marine/calving.rst
         """
         # This is a way to set the ice softness (and therefore hardness)
         # We will have to make a decision about this, we are not modeling T profile of ice
