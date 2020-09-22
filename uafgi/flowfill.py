@@ -8,7 +8,8 @@ import scipy.ndimage
 import math
 from scipy import signal
 from uafgi import make
-from uafgi import ncutil
+from uafgi import ncutil, argutil
+import sys
 
 #np.set_printoptions(threshold=sys.maxsize)
 
@@ -284,6 +285,28 @@ def disc_stencil(radius, dyx):
 
     return st
 
+def get_trough(thk, bed, threshold, vsvel, usvel):
+    """Returns a map (raster) of the main trough of the glacier.
+    sqspeed:
+        Ice speed^2
+    """
+    speed = np.hypot(vsvel*thk, usvel*thk)
+
+    sx = scipy.ndimage.sobel(speed, axis=0)
+    sy = scipy.ndimage.sobel(speed, axis=1)
+    sob = np.hypot(sx,sy)
+
+    # Look for highest 1% of values of speed change
+    speedvals = speed.reshape(-1)
+    speedvals = speedvals[~np.isnan(speedvals)]
+    np.sort(speedvals)
+
+    n = speedvals.shape[0]
+    n //= 100
+    threshold = np.mean(speedvals[-n:])
+
+    trough = (speed > threshold)
+    return trough
 
 def get_dmap(has_data, thk, threshold, dist_channel, dist_front, dyx):
     """Creates a domain of gridcells within distance of cells in amount2
@@ -507,22 +530,28 @@ def fill_flow(vvel2, uvel2, dmap, clear_divergence=False, prior_weight=0.8):
     for jj in range(0, divable_data2.shape[0]):
         for ii in range(0, divable_data2.shape[1]):
 
-            if dmap[jj,ii] == D_DATA:
+            if dmap[jj,ii] != D_DATA:
+                continue
 
-                ku = indexing_data.tuple_to_index((jj,ii))
-                try:
-                    rows.append(len(bb))
-                    cols.append(ku)
-                    vals.append(prior_weight*1.0)
-                    bb.append(prior_weight*vvel2[jj,ii])
+            # Exclude the main trough (fast-flowing ice) as boundary condition;
+            # We want this to be consistent with the bed, so we will recompute
+            if vvel2[jj,ii]*vvel2[jj,ii] + uvel2[jj,ii]*uvel2[jj,ii] > 1.e19:
+                continue
 
-                    rows.append(len(bb))
-                    cols.append(n1 + ku)
-                    vals.append(prior_weight*1.0)
-                    bb.append(prior_weight*uvel2[jj,ii])
+            ku = indexing_data.tuple_to_index((jj,ii))
+            try:
+                rows.append(len(bb))
+                cols.append(ku)
+                vals.append(prior_weight*1.0)
+                bb.append(prior_weight*vvel2[jj,ii])
 
-                except KeyError:    # It's not in sub_used
-                    pass
+                rows.append(len(bb))
+                cols.append(n1 + ku)
+                vals.append(prior_weight*1.0)
+                bb.append(prior_weight*uvel2[jj,ii])
+
+            except KeyError:    # It's not in sub_used
+                pass
 
     # ================= Solve the LSQR Problem
     ncols_s = n1*2
@@ -629,19 +658,25 @@ def fill_surface_flow(vsvel2, usvel2, amount2, dmap, clear_divergence=False, pri
 # -------------------------------------------------------
 
 class fill_surface_flow_rule(object):
-    def __init__(self, makefile, ipath, bedmachine_path, odir, max_timesteps=None):
+
+    default_kwargs = dict(clear_divergence=True, prior_weight=0.8)
+
+    def __init__(self, makefile, ipath, bedmachine_path, odir, max_timesteps=None, **kwargs0):
         self.max_timesteps = max_timesteps
         self.rule = makefile.add(self.run,
-            (ipath,bedmachine_path), (make.opath(ipath, odir, '_filled'),))
+            (ipath,bedmachine_path),
+#            (make.opath(ipath, odir, '_filled_fastice'),))
+            (make.opath(ipath, odir, '_x'),))
+        self.fill_kwargs = argutil.select_kwargs(kwargs0, self.default_kwargs)
+
 
     def run(self):
-
-
         # ------------ Read amount of ice (thickness)
         # 'outputs/bedmachine/W69.10N-thickness.nc'
 #        print('Getting thk from {}'.format(self.rule.inputs[1]))
         with netCDF4.Dataset(self.rule.inputs[1]) as nc:
             thk2 = nc.variables['thickness'][:].astype(np.float64)
+            bed2 = nc.variables['bed'][:].astype(np.float64)
 
         # Filter thickness, it's from a lower resolution
         thk2 = scipy.ndimage.gaussian_filter(thk2, sigma=2.0)
@@ -694,8 +729,11 @@ class fill_surface_flow_rule(object):
 
                 # ------------ Set up the domain map (classify gridcells)
                 has_data = np.logical_not(np.isnan(vsvel2))
-                dmap = get_dmap(has_data, thk=thk2, threshold=300.,
+                edge_threshold = 300.
+                dmap = get_dmap(has_data, thk=thk2, threshold=edge_threshold,
                     dist_channel=3000., dist_front=20000., dyx=(100.,100.))
+
+                trough = get_trough(thk2, bed2, edge_threshold, vsvel2, usvel2)
 
             #    with netCDF4.Dataset('dmap.nc', 'w') as nc:
             #        nc.createDimension('y', vsvel2.shape[0])
@@ -705,7 +743,7 @@ class fill_surface_flow_rule(object):
 
                 # ----------- Store it
                 vv3,uu3,diagnostics = fill_surface_flow(vsvel2, usvel2, amount2, dmap,
-                    clear_divergence=True, prior_weight=0.8)
+                    **self.fill_kwargs)  # clear_divergence=True, prior_weight=0.8
                 diagnostics['thk'] = thk2
                 diagnostics['dmap'] = dmap
 
@@ -715,20 +753,40 @@ class fill_surface_flow_rule(object):
                     ncout.variables['u_ssa_bc'][t,:] = uu3
 
 
-#                    # ----------- Store it
-#                    nc.createDimension('y', vsvel2.shape[0])
-#                    nc.createDimension('x', vsvel2.shape[1])
-#                    nc.createVariable('vsvel', 'd', ('y','x'))[:] = vsvel2
-#                    nc.createVariable('usvel', 'd', ('y','x'))[:] = usvel2
-#                    nc.createVariable('amount', 'd', ('y','x'))[:] = amount2
-#
-#                    nc.createVariable('vsvel_filled', 'd', ('y','x'))[:] = vv3
-#                    nc.createVariable('usvel_filled', 'd', ('y','x'))[:] = uu3
-#
-#                    nc.createVariable('vsvel_diff', 'd', ('y','x'))[:] = vv3-vsvel2
-#                    nc.createVariable('usvel_diff', 'd', ('y','x'))[:] = uu3-usvel2
-#
-#                    for vname,val in diagnostics.items():
-#                        nc.createVariable(vname, 'd', ('y','x'))[:] = val
+                    # ----------- Store it (debugging)
+                if False:
+                    with netCDF4.Dataset('flowfill.nc', 'w') as nc:
+                        nc.createDimension('y', vsvel2.shape[0])
+                        nc.createDimension('x', vsvel2.shape[1])
+                        nc.createVariable('vsvel', 'd', ('y','x'))[:] = vsvel2
+                        nc.createVariable('usvel', 'd', ('y','x'))[:] = usvel2
+                        nc.createVariable('amount', 'd', ('y','x'))[:] = amount2
+
+                        nc.createVariable('vsvel_filled', 'd', ('y','x'))[:] = vv3
+                        nc.createVariable('usvel_filled', 'd', ('y','x'))[:] = uu3
+
+                        nc.createVariable('vsvel_diff', 'd', ('y','x'))[:] = vv3-vsvel2
+                        nc.createVariable('usvel_diff', 'd', ('y','x'))[:] = uu3-usvel2
+
+
+                        vvel2=diagnostics['vvel']
+                        uvel2=diagnostics['uvel']
+
+                        for vname,val in diagnostics.items():
+                            nc.createVariable(vname, 'd', ('y','x'))[:] = val
+
+                        fastice = (vvel2*vvel2 + uvel2*uvel2)
+                        fastice[np.isnan(fastice)] = 1.e20
+                        fastice = (fastice > 1.e19)
+                        nc.createVariable('fastice', 'i', ('y','x'))[:] = fastice
+
+                        dmap = diagnostics['dmap']
+                        dmap[fastice] = 0
+                        nc.createVariable('dmap_fastice', 'i', ('y','x'))[:] = dmap
+
+                        nc.createVariable('trough', 'i', ('y','x'))[:] = trough
+
+
+                    sys.exit(0)
 
 
