@@ -666,7 +666,7 @@ class fill_surface_flow_rule(object):
         self.rule = makefile.add(self.run,
             (ipath,bedmachine_path),
 #            (make.opath(ipath, odir, '_filled_fastice'),))
-            (make.opath(ipath, odir, '_x'),))
+            (make.opath(ipath, odir, '_filled', replace='_pism'),))
         self.fill_kwargs = argutil.select_kwargs(kwargs0, self.default_kwargs)
 
 
@@ -702,9 +702,15 @@ class fill_surface_flow_rule(object):
 #                del var_pairs['u_ssa_bc']
 #                cnc.define_vars(var_pairs.items())
                 cnc.define_all_vars(zlib=True)
-
+                cnc.createVariable('thickness', 'i', ('y','x'), zlib=True)
+                cnc.createVariable('bed', 'i', ('y','x'), zlib=True)
+                cnc.createVariable('dmap', 'i', ('y','x'), zlib=True)
+                cnc.createVariable('trough', 'i', ('y','x'), zlib=True)
                 for vname in ('x', 'y', 'time', 'time_bnds'):
                     cnc.copy_var(vname, vname)
+
+                ncout.variables['thickness'][:] = thk2
+                ncout.variables['bed'][:] = bed2
 
             # Now process / copy the data
             for t in range(0,len(nc.dimensions['time'])):
@@ -732,8 +738,14 @@ class fill_surface_flow_rule(object):
                 edge_threshold = 300.
                 dmap = get_dmap(has_data, thk=thk2, threshold=edge_threshold,
                     dist_channel=3000., dist_front=20000., dyx=(100.,100.))
-
                 trough = get_trough(thk2, bed2, edge_threshold, vsvel2, usvel2)
+
+
+                # Should be the same on all timesteps
+                if t == 0:
+                    with netCDF4.Dataset(self.rule.outputs[0], 'a') as ncout:
+                        ncout.variables['dmap'][:] = dmap
+                        ncout.variables['trough'][:] = trough
 
             #    with netCDF4.Dataset('dmap.nc', 'w') as nc:
             #        nc.createDimension('y', vsvel2.shape[0])

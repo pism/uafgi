@@ -186,7 +186,7 @@ class cleanup(object):
             rule = self.makefile.rules[target]
             self._get_all_files(rule.inputs)
 
-def opath(ipath, odir, suffix):
+def opath(ipath, odir, suffix, replace=None):
     """Converts from [idir]/[ipath][ext] to [odir]/[opath][suffix][ext]
     ipath:
         Full pathname of input file
@@ -195,4 +195,8 @@ def opath(ipath, odir, suffix):
     """
     idir,ileaf = os.path.split(ipath)
     iroot,iext = os.path.splitext(ileaf)
-    return os.path.join(odir, '{}{}{}'.format(iroot,suffix,iext))
+    if replace is None:
+        leaf = '{}{}{}'.format(iroot,suffix,iext)
+    else:
+        leaf = '{}{}'.format(iroot.replace(replace, suffix), iext)
+    return os.path.join(odir, leaf)

@@ -5,6 +5,7 @@ from uafgi import giutil,iopfile
 
 # These are files for which domain_checksum2() == 0
 blacklist_raw = (
+    # ---------------------  W69.10N
     'TSX_W69.10N_02Jun18_13Jun18_09-48-58_{parameter}_v02.0{ext}',
     'TSX_W69.10N_29May15_20Jun15_09-48-37_{parameter}_v02.0{ext}',
     'TSX_W69.10N_31May14_11Jun14_09-48-32_{parameter}_v02.0{ext}',
@@ -38,6 +39,8 @@ blacklist_raw = (
     # Right domain but Missing a LOT
     'TSX_W69.10N_03Jul19_25Jul19_20-42-06_{parameter}_v02.0{ext}',
     'TSX_W69.10N_10Sep17_02Oct17_10-06-06_{parameter}_v02.0{ext}', 
+
+    # ---------------------- W71.55N
 )
 
 def _get_blacklist(**kwargs):
