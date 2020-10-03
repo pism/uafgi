@@ -285,113 +285,32 @@ def disc_stencil(radius, dyx):
 
     return st
 
+# ----------------------------------------------------------
+def get_close_calving(shape, dyx, calving_front_centers, dist_front):
+    """Creates a map that's True close to calving fronts
+    calving_front_centers: ((y,x), (y,x), ...)
+        Centers of calving fronts we want to be near to.
+    dist_front:
+        Distance from the calving front to include in the domain
+    """
 
-def single_dmap_trough(has_data, thk, threshold, vsvel, usvel,
-    dist_channel, dist_front, dyx, front_center)
-    """Gets a dmap and trough for a single glacier"""
-
-    # Make a mask of ONLY points close to the calving front
-    close_calving = np.zeros(thk.shape, dtype=bool)
-    dthresh = dist_front*dist_front
-    for j in range(0,dmap.shape[0]):
-        y  = (j+.5)*dyx[0]
-        y2 = (y-front_center[0])*(y-front_center[0])
-        for i in range(0,dmap.shape[1]):
-            x = (i+.5)*dyx[1]
-            x2 = (x-front_center[1])*(x-front_center[1])
-            if y2+x2 > dthresh:
-                close_calving[j,i] = True
-
-
-
-
-
-
-
-
-
-def get_dmap_trough(has_data, thk, threshold, vsvel, usvel,
-    dist_channel, dist_front, dyx, front_centers)
-
-
-    # Divine where the calving front is, if we were not told
-    # Get maximum value of Sobel fill.  This will be an ice cliff,
-    # somewhere on the calving front.
-    if front_centers is None:
-        sobmax = np.max(sob)
-        front = (sob >= .95*sobmax).astype('float32')
-        fc = scipy.ndimage.measurements.center_of_mass(front)
-        front_centers = ((fc[0]*dyx[0], fc[1]*dyx[1]),)
-
-
-    # Make a mask of ONLY points close to the calving fronts.
-    close_calving = np.zeros(thk.shape, dtype=bool)
-    for front_center in front_centers:
+    # Focus on area near calving front
+    close_calving = np.zeros(shape, dtype=bool)
+    for calving_front_center in calving_front_centers:
         dthresh = dist_front*dist_front
-        for j in range(0,dmap.shape[0]):
+        for j in range(0,shape[0]):
             y  = (j+.5)*dyx[0]
-            y2 = (y-front_center[0])*(y-front_center[0])
-            for i in range(0,dmap.shape[1]):
+            y2 = (y-calving_front_center[0])*(y-calving_front_center[0])
+            for i in range(0,shape[1]):
                 x = (i+.5)*dyx[1]
-                x2 = (x-front_center[1])*(x-front_center[1])
-                if y2+x2 > dthresh:
+                x2 = (x-calving_front_center[1])*(x-calving_front_center[1])
+                if y2+x2 <= dthresh:
                     close_calving[j,i] = True
 
-
-
-
-
-
-
-
-    # Figure out where there's a trough
-    speed = np.hypot(vsvel*thk, usvel*thk)
-
-    sx = scipy.ndimage.sobel(speed, axis=0)
-    sy = scipy.ndimage.sobel(speed, axis=1)
-    sob = np.hypot(sx,sy)
-
-    # Look for highest 1% of values of d[speed]/dx
-    speedvals = speed.reshape(-1)
-    speedvals = speedvals[~np.isnan(speedvals)]
-    np.sort(speedvals)
-
-    # Look up mean speed in areas of high d[speed]/dx
-    n = speedvals.shape[0]
-    n //= 100
-    threshold = np.mean(speedvals[-n:])
-
-    trough = (speed > threshold)
-
-
-
-
-
-def get_trough(thk, bed, threshold, vsvel, usvel):
-    """Returns a map (raster) of the main trough of the glacier.
-    sqspeed:
-        Ice speed^2
-    """
-    speed = np.hypot(vsvel*thk, usvel*thk)
-
-    sx = scipy.ndimage.sobel(speed, axis=0)
-    sy = scipy.ndimage.sobel(speed, axis=1)
-    sob = np.hypot(sx,sy)
-
-    # Look for highest 1% of values of d[speed]/dx
-    speedvals = speed.reshape(-1)
-    speedvals = speedvals[~np.isnan(speedvals)]
-    np.sort(speedvals)
-
-    # Look up mean speed in areas of high d[speed]/dx
-    n = speedvals.shape[0]
-    n //= 100
-    threshold = np.mean(speedvals[-n:])
-
-    trough = (speed > threshold)
-    return trough
-
-def get_dmap(has_data, thk, threshold, dist_channel, dist_front, dyx, front_centers=None):
+#    close_calving[:] = True   # DEBUGGING
+    return close_calving
+# ----------------------------------------------------------
+def single_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel, dist_front, dyx, close_calving):
     """Creates a domain of gridcells within distance of cells in amount2
     that are >= threshold.
 
@@ -413,100 +332,6 @@ def get_dmap(has_data, thk, threshold, dist_channel, dist_front, dyx, front_cent
         Points on/near to the calving front(s) we wish to capture
     """
 
-
-    with netCDF4.Dataset('thk.nc', 'w') as nc:
-        nc.createDimension('y', thk.shape[0])
-        nc.createDimension('x', thk.shape[1])
-        nc.createVariable('thk', 'd', ('y','x'))[:] = thk
-
-
-    # Sobel-filter the amount variable
-    sx = scipy.ndimage.sobel(thk, axis=0)
-    sy = scipy.ndimage.sobel(thk, axis=1)
-    sob = np.hypot(sx,sy)
-
-    # Get original domain, where thickness is changing rapidly
-    domain0 = (sob > threshold).astype('float32')
-
-    # Create a disc-shaped mask, used to convolve
-    stencil = disc_stencil(dist_channel, dyx)
-    print('stencil shape ',stencil.shape)
-
-    # Create domain of points close to original data points
-    domain = (signal.convolve2d(domain0, stencil, mode='same') != 0)
-    if np.sum(np.sum(domain)) == 0:
-        raise ValueError('Nothing found in the domain, something is wrong...')
-
-    # Points close to the calving front
-    # Get maximum value of Sobel fill.  This will be an ice cliff,
-    # somewhere on the calving front.
-    if front_centers is None:
-        # Divine where the calving front is
-        sobmax = np.max(sob)
-        front = (sob >= .95*sobmax).astype('float32')
-        fc = scipy.ndimage.measurements.center_of_mass(front)
-        front_centers = ((fc[0]*dyx[0], fc[1]*dyx[1]),)
-
-    # Create the dmap
-#    print('n domain = {} {} has_data = {}'.format(np.sum(np.sum(domain0)), , np.sum(np.sum(has_data))))
-    dmap = np.zeros(thk.shape, dtype='i') + D_UNUSED 
-   dmap[domain] = D_MISSING
-    dmap[has_data] = D_DATA
-    dmap[np.logical_not(domain)] = D_UNUSED
-
-    # Focus on area near calving front
-    for front_center in front_centers:
-        dthresh = dist_front*dist_front
-        for j in range(0,dmap.shape[0]):
-            y  = (j+.5)*dyx[0]
-            y2 = (y-front_center[0])*(y-front_center[0])
-            for i in range(0,dmap.shape[1]):
-                x = (i+.5)*dyx[1]
-                x2 = (x-front_center[1])*(x-front_center[1])
-                if y2+x2 > dthresh:
-                    dmap[j,i] = D_UNUSED
-
-
-    return dmap
-
-# ----------------------------------------------------------
-# ----------------------------------------------------------
-def 
-# ----------------------------------------------------------
-def single_dmap(has_data0, thk0, threshold, dist_channel, dist_front, dyx, front_center):
-    """Creates a domain of gridcells within distance of cells in amount2
-    that are >= threshold.
-
-    has_data: (2D bool)
-        Points that have U/V velocities available.
-        has_data = np.logical_not(np.isnan(values))
-    thk: (2D)
-        Ice thickness
-    threshold:
-        Threshold to define edge of main channel by rapid changes in
-        Sobel-filtered values of thk.
-    dist_channel:
-        Distance from the edge of the channel to include in domain
-    dist_front:
-        Distance from the glacier front to include in the domain
-    dyx: (dy,dx)
-        Grid spacing
-    front_points: ((y,x), (y,x), ...)
-        Points on/near to the calving front(s) we wish to capture
-    """
-
-
-    # Focus on area near calving front
-    close_calving = np.ones(thk.shape, dtype=bool)
-    dthresh = dist_front*dist_front
-    for j in range(0,dmap.shape[0]):
-        y  = (j+.5)*dyx[0]
-        y2 = (y-front_center[0])*(y-front_center[0])
-        for i in range(0,dmap.shape[1]):
-            x = (i+.5)*dyx[1]
-            x2 = (x-front_center[1])*(x-front_center[1])
-            if y2+x2 > dthresh:
-                close_calving[j,i] = False
 
     # ------------------------------------------------
 
@@ -559,6 +384,48 @@ def single_dmap(has_data0, thk0, threshold, dist_channel, dist_front, dyx, front
     return dmap, trough
 
 # ----------------------------------------------------------
+def get_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel, dist_front, dyx, front_centers_ji):
+    """Creates a domain of gridcells within distance of cells in amount2
+    that are >= threshold.
+
+    has_data: (2D bool)
+        Points that have U/V velocities available.
+        has_data = np.logical_not(np.isnan(values))
+    thk: (2D)
+        Ice thickness
+    threshold:
+        Threshold to define edge of main channel by rapid changes in
+        Sobel-filtered values of thk.
+    dist_channel:
+        Distance from the edge of the channel to include in domain
+    dist_front:
+        Distance from the glacier front to include in the domain
+    dyx: (dy,dx)
+        Grid spacing
+    front_points: ((y,x), (y,x), ...)
+        Points on/near to the calving front(s) we wish to capture
+    """
+
+    # Points close to the calving front
+    # Get maximum value of Sobel fill.  This will be an ice cliff,
+    # somewhere on the calving front.
+    if front_centers_ji is None:
+        # Divine where the calving front is
+        sobmax = np.max(sob)
+        front = (sob >= .95*sobmax).astype('float32')
+        fc = scipy.ndimage.measurements.center_of_mass(front)
+        front_centers = ((fc[0]*dyx[0], fc[1]*dyx[1]),)
+    else:
+        front_centers = [ (fcji[0]*dyx[0], fcji[1]*dyx[1]) for fcji in front_centers_ji ]
+
+    close_calving = get_close_calving(thk.shape, dyx, front_centers, dist_front)
+
+    for front_center in front_centers:
+        dmap1,trough1 = single_dmap_trough(has_data,thk,bed,threshold,vsvel,usvel,dist_channel,dist_front,dyx,close_calving)
+
+    # TODO: Combine
+
+    return dmap1,trough1,close_calving
 # ----------------------------------------------------------
 def reduce_column_rank(cols):
     """Reduce the column rank of a sparse matrix by renumbering columns to
@@ -885,6 +752,7 @@ class fill_surface_flow_rule(object):
                 cnc.createVariable('bed', 'i', ('y','x'), zlib=True)
                 cnc.createVariable('dmap', 'i', ('y','x'), zlib=True)
                 cnc.createVariable('trough', 'i', ('y','x'), zlib=True)
+                cnc.createVariable('close_calving', 'i', ('y','x'), zlib=True)
                 for vname in ('x', 'y', 'time', 'time_bnds'):
                     cnc.copy_var(vname, vname)
 
@@ -915,10 +783,12 @@ class fill_surface_flow_rule(object):
                 # ------------ Set up the domain map (classify gridcells)
                 has_data = np.logical_not(np.isnan(vsvel2))
                 edge_threshold = 300.
-                dmap = get_dmap(has_data, thk=thk2, threshold=edge_threshold,
+                dmap,trough,close_calving = get_dmap_trough(
+                    has_data, thk2, bed2, edge_threshold,
+                    vsvel2, usvel2,
                     dist_channel=3000., dist_front=20000., dyx=(100.,100.),
-                    front_centers=self.front_centers)
-                trough = get_trough(thk2, bed2, edge_threshold, vsvel2, usvel2)
+                    front_centers_ji=self.front_centers)
+#                trough = get_trough(thk2, bed2, edge_threshold, vsvel2, usvel2)
 
 
                 # Should be the same on all timesteps
@@ -926,6 +796,7 @@ class fill_surface_flow_rule(object):
                     with netCDF4.Dataset(self.rule.outputs[0], 'a') as ncout:
                         ncout.variables['dmap'][:] = dmap
                         ncout.variables['trough'][:] = trough
+                        ncout.variables['close_calving'][:] = close_calving
                     print('flowfill exiting A')
                     sys.exit(0)
 
