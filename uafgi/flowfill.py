@@ -333,8 +333,33 @@ def single_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel
     """
 
 
-    # ------------------------------------------------
+    # TROUGH
+    # -------------------------------------------
+    # Figure out where there's a trough
+    speed = np.hypot(vsvel*thk, usvel*thk)
+    speed[np.logical_not(close_calving)] = 0
 
+    # Compute Sobel sob = hypot(dSpeed/dx, dSpeed/dy)
+    sx = scipy.ndimage.sobel(speed, axis=0)
+    sy = scipy.ndimage.sobel(speed, axis=1)
+    sob = np.hypot(sx,sy)
+
+    # Look for highest 1% of values of d[speed]/dx
+    sobvals = sob.reshape(-1)
+    sobvals = sobvals[np.logical_and(
+        sobvals!=0,
+        np.logical_not(np.isnan(sobvals)))]
+
+    np.sort(sobvals)
+
+    # Look up mean speed in areas of high d[speed]/dx
+    n = max(30, sobvals.shape[0] // 500)
+    threshold = np.mean(sobvals[-n:])
+
+    trough = (speed > threshold)
+
+    # DMAP
+    # -----------------------------------------------------
     # Sobel-filter the amount variable
     sx = scipy.ndimage.sobel(thk, axis=0)
     sy = scipy.ndimage.sobel(thk, axis=1)
@@ -358,30 +383,10 @@ def single_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel
     dmap[domain] = D_MISSING
     dmap[has_data] = D_DATA
     dmap[np.logical_not(domain)] = D_UNUSED
-
-    # -------------------------------------------
-    # Figure out where there's a trough
-    speed = np.hypot(vsvel*thk, usvel*thk)
-    speed[np.logical_not(close_calving)] = 0
-
-    sx = scipy.ndimage.sobel(speed, axis=0)
-    sy = scipy.ndimage.sobel(speed, axis=1)
-    sob = np.hypot(sx,sy)
-
-    # Look for highest 1% of values of d[speed]/dx
-    speedvals = speed.reshape(-1)
-    speedvals = speedvals[~np.isnan(speedvals)]
-    np.sort(speedvals)
-
-    # Look up mean speed in areas of high d[speed]/dx
-    n = speedvals.shape[0]
-    n //= 100
-    threshold = np.mean(speedvals[-n:])
-
-    trough = (speed > threshold)
+    # ------------------------------------------------
 
 
-    return dmap, trough
+    return dmap, trough,speed
 
 # ----------------------------------------------------------
 def get_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel, dist_front, dyx, front_centers_ji):
@@ -410,6 +415,13 @@ def get_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel, d
     # Get maximum value of Sobel fill.  This will be an ice cliff,
     # somewhere on the calving front.
     if front_centers_ji is None:
+
+
+    speed = np.hypot(vsvel*thk, usvel*thk)
+        sx = scipy.ndimage.sobel(speed, axis=0)
+        sy = scipy.ndimage.sobel(speed, axis=1)
+        sob = np.hypot(sx,sy)
+
         # Divine where the calving front is
         sobmax = np.max(sob)
         front = (sob >= .95*sobmax).astype('float32')
@@ -421,11 +433,11 @@ def get_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel, d
     close_calving = get_close_calving(thk.shape, dyx, front_centers, dist_front)
 
     for front_center in front_centers:
-        dmap1,trough1 = single_dmap_trough(has_data,thk,bed,threshold,vsvel,usvel,dist_channel,dist_front,dyx,close_calving)
+        dmap1,trough1,speed1 = single_dmap_trough(has_data,thk,bed,threshold,vsvel,usvel,dist_channel,dist_front,dyx,close_calving)
 
     # TODO: Combine
 
-    return dmap1,trough1,close_calving
+    return dmap1,trough1,speed1,close_calving
 # ----------------------------------------------------------
 def reduce_column_rank(cols):
     """Reduce the column rank of a sparse matrix by renumbering columns to
@@ -706,13 +718,13 @@ class fill_surface_flow_rule(object):
 
     default_kwargs = dict(clear_divergence=True, prior_weight=0.8)
 
-    def __init__(self, makefile, ipath, bedmachine_path, odir, max_timesteps=None, front_centers=None, **kwargs0):
+    def __init__(self, makefile, ipath, bedmachine_path, odir, max_timesteps=None, front_centers_ji=None, **kwargs0):
         self.max_timesteps = max_timesteps
         self.rule = makefile.add(self.run,
             (ipath,bedmachine_path),
 #            (make.opath(ipath, odir, '_filled_fastice'),))
             (make.opath(ipath, odir, '_filled', replace='_pism'),))
-        self.front_centers = front_centers
+        self.front_centers_ji = front_centers_ji
         self.fill_kwargs = argutil.select_kwargs(kwargs0, self.default_kwargs)
 
 
@@ -748,6 +760,7 @@ class fill_surface_flow_rule(object):
 #                del var_pairs['u_ssa_bc']
 #                cnc.define_vars(var_pairs.items())
                 cnc.define_all_vars(zlib=True)
+                cnc.createVariable('speed', 'd', ('time', 'y','x'), zlib=True)
                 cnc.createVariable('thickness', 'i', ('y','x'), zlib=True)
                 cnc.createVariable('bed', 'i', ('y','x'), zlib=True)
                 cnc.createVariable('dmap', 'i', ('y','x'), zlib=True)
@@ -783,11 +796,13 @@ class fill_surface_flow_rule(object):
                 # ------------ Set up the domain map (classify gridcells)
                 has_data = np.logical_not(np.isnan(vsvel2))
                 edge_threshold = 300.
-                dmap,trough,close_calving = get_dmap_trough(
+                dmap,trough,speed,close_calving = get_dmap_trough(
                     has_data, thk2, bed2, edge_threshold,
                     vsvel2, usvel2,
                     dist_channel=3000., dist_front=20000., dyx=(100.,100.),
-                    front_centers_ji=self.front_centers)
+                    front_centers_ji=self.front_centers_ji)
+                with netCDF4.Dataset(self.rule.outputs[0], 'a') as ncout:
+                    ncout.variables['speed'][t,:] = speed
 #                trough = get_trough(thk2, bed2, edge_threshold, vsvel2, usvel2)
 
 
