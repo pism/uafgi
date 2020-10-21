@@ -337,7 +337,7 @@ def single_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel
     # -------------------------------------------
     # Figure out where there's a trough
     speed = np.hypot(vsvel*thk, usvel*thk)
-    speed[np.logical_not(close_calving)] = 0
+#    speed[np.logical_not(close_calving)] = 0
 
     # Compute Sobel sob = hypot(dSpeed/dx, dSpeed/dy)
     sx = scipy.ndimage.sobel(speed, axis=0)
@@ -346,34 +346,34 @@ def single_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel
 
     # Look for highest 1% of values of d[speed]/dx
     sobvals = sob.reshape(-1)
-    sobvals = sobvals[np.logical_and(
-        sobvals!=0,
-        np.logical_not(np.isnan(sobvals)))]
+    sobvals[np.isnan(sobvals)] = 0    # Avoid nan in argsort()
+    n = max(30, sobvals[sobvals != 0].shape[0] // 100)
+    print('n = ',n)
+#    sobvals = sobvals[np.logical_and(
+#        sobvals!=0,
+#        np.logical_not(np.isnan(sobvals)))]
+#    n = max(30, sobvals.shape[0] // 500)
 
-    np.sort(sobvals)
+#    np.sort(sobvals)
+    maxindices = sobvals.argsort()[-n:][::-1]
+    threshold = np.mean(speed.reshape(-1)[maxindices])
+    print('threshold = {}'.format(threshold))
 
     # Look up mean speed in areas of high d[speed]/dx
-    n = max(30, sobvals.shape[0] // 500)
-    threshold = np.mean(sobvals[-n:])
+#    threshold = np.mean(sobvals[-n:])
 
     trough = (speed > threshold)
 
     # DMAP
     # -----------------------------------------------------
-    # Sobel-filter the amount variable
-    sx = scipy.ndimage.sobel(thk, axis=0)
-    sy = scipy.ndimage.sobel(thk, axis=1)
-    sob = np.hypot(sx,sy)
-
-    # Get original domain, where thickness is changing rapidly
-    domain0 = (np.logical_and(close_calving, sob > threshold)).astype('float32')
 
     # Create a disc-shaped mask, used to convolve
     stencil = disc_stencil(dist_channel, dyx)
     print('stencil shape ',stencil.shape)
 
-    # Create domain of points close to original data points
-    domain = (signal.convolve2d(domain0, stencil, mode='same') != 0)
+    # Create domain of points close to the trough
+    trough_d = trough.astype('d')
+    domain = (signal.convolve2d(trough_d, stencil, mode='same') != 0)
     if np.sum(np.sum(domain)) == 0:
         raise ValueError('Nothing found in the domain, something is wrong...')
 
@@ -417,18 +417,22 @@ def get_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel, d
     if front_centers_ji is None:
 
 
-    speed = np.hypot(vsvel*thk, usvel*thk)
+        speed = np.hypot(vsvel*thk, usvel*thk)
         sx = scipy.ndimage.sobel(speed, axis=0)
         sy = scipy.ndimage.sobel(speed, axis=1)
         sob = np.hypot(sx,sy)
+        sob[np.isnan(sob)] = 0
 
         # Divine where the calving front is
         sobmax = np.max(sob)
+        print('sobmax = {}'.format(sobmax))
         front = (sob >= .95*sobmax).astype('float32')
         fc = scipy.ndimage.measurements.center_of_mass(front)
         front_centers = ((fc[0]*dyx[0], fc[1]*dyx[1]),)
     else:
         front_centers = [ (fcji[0]*dyx[0], fcji[1]*dyx[1]) for fcji in front_centers_ji ]
+#    if np.isnan(front_centers[0]).any() or np.isnan(front_centers[1]).any():
+#        raise ValueError('Invalid front_centers: {}'.format(front_centers))
 
     close_calving = get_close_calving(thk.shape, dyx, front_centers, dist_front)
 
@@ -812,8 +816,8 @@ class fill_surface_flow_rule(object):
                         ncout.variables['dmap'][:] = dmap
                         ncout.variables['trough'][:] = trough
                         ncout.variables['close_calving'][:] = close_calving
-                    print('flowfill exiting A')
-                    sys.exit(0)
+#                    print('flowfill exiting A')
+#                    sys.exit(0)
 
             #    with netCDF4.Dataset('dmap.nc', 'w') as nc:
             #        nc.createDimension('y', vsvel2.shape[0])

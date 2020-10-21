@@ -6,12 +6,58 @@ import gdal
 from cdo import Cdo
 import cf_units
 
-from uafgi import iopfile
+from uafgi import iopfile,ioutil,ncutil
 
 """Parsers and formatters for NSIDC file sets"""
 
 
 # -------------------------------------------------------------
+class extract_grid(object):
+    """Chooses a single TIFF file and creates a single file just
+    describing the grid."""
+
+    def __init__(self, makefile, idir, parse_fn, odir, grid):
+
+        self.grid = grid
+        self.odir = odir
+
+        # Get list of .tif files for the given grid
+        attrs = {'grid': grid, 'ext': '.tif'}
+        filter_fn = iopfile.filter_attrs(attrs)
+        pfiles_tif = iopfile.listdir(idir, parse_fn, filter_fn)
+
+        # Go through just one file
+        pf = pfiles_tif[0]
+        self.ipath = pf.path
+        self.opath = os.path.join(odir, '{}-grid.nc'.format(grid))
+        self.rule = makefile.add(self.run,
+            (self.ipath,),
+            (self.opath,))
+            
+    def run(self):
+        os.makedirs(os.path.split(self.opath)[0], exist_ok=True)
+
+        with ioutil.tmp_dir(self.odir) as tdir:
+            tmp_file = os.path.join(tdir, 'tmp.nc')
+
+            print("Converting {} to {}".format(self.ipath, self.opath))
+            # use gdal's python binging to convert GeoTiff to netCDF
+            # advantage of GDAL: it gets the projection information right
+            # disadvantage: the variable is named "Band1", lacks metadata
+            ds = gdal.Open(self.ipath)
+            options = gdal.TranslateOptions(gdal.ParseCommandLine(
+                "-co COMPRESS=DEFLATE"))
+            ds = gdal.Translate(tmp_file, ds, options=options)
+            ds = None
+
+            # Copy out the netCDF file, but without Band1 var
+            with netCDF4.Dataset(tmp_file) as nc:
+                with netCDF4.Dataset(self.opath, 'w') as ncout:
+                    cnc = ncutil.copy_nc(nc,ncout)
+                    cnc.define_vars(['x','y','polar_stereographic'], zlib=True)
+                    ncout.grid = self.grid
+                    cnc.copy_data()
+
 # ---------------------------------------------------
 class tiff_to_netcdf0(object):
     """Makefile macro, convert a GeoTIFF to raw NetCDF file.

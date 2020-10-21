@@ -126,10 +126,13 @@ class FrontEvolution(object):
                 if not speed < huge_value:
                     bc_mask[i, j] = 1
 
-    def __call__(self, geometry, ice_velocity, run_length, output=None):
+    def __call__(self, geometry, ice_velocity, t0,t1, output=None):
         """Perform a number of steps of the mass continuity equation and the
         calving parameterization to evolve ice geometry.
-
+        t0:
+            Start time of segment to run
+        t1:
+            End time
         """
         day_length = 86400.0
 
@@ -149,8 +152,8 @@ class FrontEvolution(object):
         # Cap ice speed at ~15.8 km/year (5e-4 m/s).
         self.cap_ice_speed(self.ice_velocity, valid_max=self.kwargs['max_ice_speed'])
 
-        t = 0.0
-        while t < run_length:
+        time = t0
+        while time < t1:
             # compute the calving rate
             self.calving_model.update(geometry.cell_type, geometry.ice_thickness,
                                       self.ice_velocity, self.ice_enthalpy)
@@ -170,10 +173,10 @@ class FrontEvolution(object):
 
             dt = min(dt_advance, dt_retreat)
 
-            if t + dt > run_length:
-                dt = run_length - t
+            if time + dt > t1:
+                dt = t1 - time
 
-            print(f"{t/day_length:.2f}, dt = {dt:.2f} (s) or {dt/day_length:2.2f} days")
+            print(f"{time/day_length:.2f}, dt = {dt:.2f} (s) or {dt/day_length:2.2f} days")
 
             self.advance_model.flow_step(
                 geometry, dt, self.ice_velocity,
@@ -200,14 +203,14 @@ class FrontEvolution(object):
 
 
             if output:
-                PISM.append_time(output, self.config, t)
+                PISM.append_time(output, self.config, time)
 
                 geometry.ice_thickness.write(output)
                 geometry.cell_type.write(output)
                 self.retreat_rate.write(output)
                 self.advance_model.flux_divergence().write(output)
 
-            t += dt
+            time += dt
 
     def cap_ice_speed(self, array, valid_max):
         "Cap velocity at valid_max"

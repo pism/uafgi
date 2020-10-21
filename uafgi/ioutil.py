@@ -22,6 +22,7 @@ import string
 import tempfile
 import filecmp
 import shutil
+import signal
 
 # http://stackoverflow.com/questions/13250050/redirecting-the-output-of-a-python-function-from-stdout-to-variable-in-python
 @contextlib.contextmanager
@@ -220,12 +221,68 @@ class TmpFiles(object):
             except FileNotFoundError:
                 pass
 
-@contextlib.contextmanager
-def tmp_dir(dir='.'):
-    tempd = tempfile.mkdtemp(dir=dir)
-    yield tempd
-    shutil.rmtree(tempd)
+#@contextlib.contextmanager
+#def tmp_dir(dir='.'):
+#    tempd = tempfile.mkdtemp(dir=dir)
+#    yield tempd
+#    shutil.rmtree(tempd)
 
+
+class tmp_dir(object):
+    """Context manager that creates a temporary directory, which will be
+    removed upon exit, or even Ctrl-C.  The caller can put files in
+    the temporary directory that is created; and they will all
+    disappear upon exit.
+    """
+
+    def __init__(self, dir='.', remove=True, tdir=None):
+        """
+        dir:
+            Directory in which to create the temporary directory.
+            (Useful if large files are to be created, this should be in
+             the same filesystem as the ultimate resulting file will be)
+        remove:
+            Remove the temporary directory when done?
+            Set to False for debugging, to see what happened.
+        tdir:
+            Name of the temporary directory to use directly.
+            If this is set, then dir and remove will be ignored.
+            The user-defined tdir director will NOT be removed.
+            For debugging into a consistently named directory...
+        """
+        self.tdir = tdir
+        if self.tdir is not None:
+            self.remove = False    # Don't remove user-specified tdir
+        else:
+            self.dir = dir
+            self.remove = remove
+
+    def _handler(self, sig, frame):
+        """Called when user does Ctrl-C (SIGINT)"""
+        self._remove()
+        self.original_sigint_handler(sig, frame)
+
+    def __enter__(self):
+        if self.tdir is not None:
+            os.makedirs(self.tdir, exist_ok=True)
+            self.tempd = self.tdir
+        else:
+            self.tempd = tempfile.mkdtemp(dir=self.dir)
+            if not self.remove:
+                print('Creating temporary directory {}'.format(tempd))
+
+            # https://stackoverflow.com/questions/22916783/reset-python-sigint-to-default-signal-handler
+            self.original_sigint_handler = signal.getsignal(signal.SIGINT)
+            signal.signal(signal.SIGINT, self._handler)
+        return self.tempd
+
+    def _remove(self):
+        if self.remove:
+            signal.signal(signal.SIGINT, self.original_sigint_handler)
+            shutil.rmtree(self.tempd, ignore_errors=True)
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self._remove()
 
 # Also see:
 def temporaryFilename(prefix=None, suffix='tmp', dir=None, text=False, removeOnExit=True):

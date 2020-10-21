@@ -126,7 +126,10 @@ class compute(object):
             sec_units = cfutil.replace_reftime_unit(time_units, 'seconds')
             nctime_bnds_d = nc.variables[nctime.bounds]
             time_d = nctime[:]    # Time in days
-            timeattrs = [(name,nctime.getncattr(name)) for name in nctime.ncattrs()] # All attrs on time var
+            timeattrs = dict(
+                (name,nctime.getncattr(name))
+                for name in nctime.ncattrs()) # All attrs on time var
+            timeattrs['units'] = str(sec_units)    # PISM will write in seconds!
             time_bnds_d = nctime_bnds_d[:]
 # -----------
 
@@ -138,7 +141,7 @@ class compute(object):
 
         try:
             # Add in all the time attributes
-            for name,val in timeattrs:
+            for name,val in timeattrs.items():
                 output.write_attribute('time', name, val)
 
             # Run the calving model for each different forcing through time
@@ -149,7 +152,7 @@ class compute(object):
                 ice_velocity.read(self.velocity_file, its)   # 0 ==> first record of that file (if time-dependent)
 
                 front_evolution(geometry, ice_velocity,
-                    run_length = tb_s[1] - tb_s[0],
+                    tb_s[0], tb_s[1],
                     output=output)
 
         finally:
