@@ -310,28 +310,13 @@ def get_close_calving(shape, dyx, calving_front_centers, dist_front):
 #    close_calving[:] = True   # DEBUGGING
     return close_calving
 # ----------------------------------------------------------
-def single_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel, dist_front, dyx, close_calving):
-    """Creates a domain of gridcells within distance of cells in amount2
-    that are >= threshold.
-
-    has_data: (2D bool)
-        Points that have U/V velocities available.
-        has_data = np.logical_not(np.isnan(values))
+def single_trough(thk, bed, vsvel, usvel):
+    """
     thk: (2D)
         Ice thickness
-    threshold:
-        Threshold to define edge of main channel by rapid changes in
-        Sobel-filtered values of thk.
-    dist_channel:
-        Distance from the edge of the channel to include in domain
-    dist_front:
-        Distance from the glacier front to include in the domain
-    dyx: (dy,dx)
-        Grid spacing
-    front_points: ((y,x), (y,x), ...)
-        Points on/near to the calving front(s) we wish to capture
+    bed: (2D)
+        BedMachine (or other) bed
     """
-
 
     # TROUGH
     # -------------------------------------------
@@ -363,6 +348,34 @@ def single_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel
 #    threshold = np.mean(sobvals[-n:])
 
     trough = (speed > threshold)
+    return trough
+
+# ----------------------------------------------------------
+def single_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel, dist_front, dyx, close_calving):
+    """Creates a domain of gridcells within distance of cells in amount2
+    that are >= threshold.
+
+    has_data: (2D bool)
+        Points that have U/V velocities available.
+        has_data = np.logical_not(np.isnan(values))
+    thk: (2D)
+        Ice thickness
+    bed: (2D)
+        BedMachine (or other) bed
+    threshold: [NOT USED]
+        Threshold to define edge of main channel by rapid changes in
+        Sobel-filtered values of thk.
+    dist_channel:
+        Distance from the edge of the channel to include in domain
+    dist_front:
+        Distance from the glacier front to include in the domain
+    dyx: (dy,dx)
+        Grid spacing
+    front_points: ((y,x), (y,x), ...)
+        Points on/near to the calving front(s) we wish to capture
+    """
+
+    trough = single_trough(thk, bed, vsvel, usvel)
 
     # DMAP
     # -----------------------------------------------------
@@ -398,7 +411,7 @@ def get_dmap_trough(has_data, thk, bed, threshold, vsvel, usvel, dist_channel, d
         has_data = np.logical_not(np.isnan(values))
     thk: (2D)
         Ice thickness
-    threshold:
+    threshold: [NOT USED]
         Threshold to define edge of main channel by rapid changes in
         Sobel-filtered values of thk.
     dist_channel:

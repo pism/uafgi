@@ -1,3 +1,5 @@
+import shapefile
+
 def read_shapes(fname):
     """Straight shapefile reader"""
     with shapefile.Reader(fname) as sf:

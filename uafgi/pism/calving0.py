@@ -152,7 +152,16 @@ class FrontEvolution(object):
         # Cap ice speed at ~15.8 km/year (5e-4 m/s).
         self.cap_ice_speed(self.ice_velocity, valid_max=self.kwargs['max_ice_speed'])
 
+        if output:
+            PISM.append_time(output, self.config, t0)
+
+            geometry.ice_thickness.write(output)
+            geometry.cell_type.write(output)
+            self.retreat_rate.write(output)
+            self.advance_model.flux_divergence().write(output)
+
         time = t0
+        print('time0x = {} (type {})'.format(time, type(time)))
         while time < t1:
             # compute the calving rate
             self.calving_model.update(geometry.cell_type, geometry.ice_thickness,
@@ -202,6 +211,9 @@ class FrontEvolution(object):
             geometry.ensure_consistency(self.min_thickness)
 
 
+            # Advance to end of timestep
+            time += dt
+            print('time1 = {}'.format(time))
             if output:
                 PISM.append_time(output, self.config, time)
 
@@ -210,7 +222,6 @@ class FrontEvolution(object):
                 self.retreat_rate.write(output)
                 self.advance_model.flux_divergence().write(output)
 
-            time += dt
 
     def cap_ice_speed(self, array, valid_max):
         "Cap velocity at valid_max"
