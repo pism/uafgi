@@ -283,6 +283,27 @@ class FrontEvolution(object):
 
         return model
 
+def enforce_ice_extent(ice_thickness, max_extent_mask, removed_thickness):
+    """Enforce the prescribed maximum ice extent and keep track of the
+    amount of ice removed in the process.
+
+    ice_thickness: input/output (modified in place)
+
+    max_extent_mask: input; mask of 0 and 1 (1 at grid cells that can be icy, 0 elsewhere)
+
+    removed_thickness: input/output; accumulates changes to ice thickness
+        - This field is an argument to avoid re-allocating it for every mass continuity time step.
+        - Each call of this function *adds* to values already stored there.
+        - The total volume removed after several calls (several mass continuity time steps)
+          can be computed as removed_thickness.sum() * dx * dy.
+    """
+
+    with PISM.vec.Access([ice_thickness, max_extent_mask, removed_thickness]):
+        for i,j in grid.points():
+            if max_extent_mask[i, j] < 0.5:
+                removed_thickness[i, j] += ice_thickness[i, j]
+                ice_thickness[i, j] = 0.0
+
 
 if __name__ == "__main__":
 
