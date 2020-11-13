@@ -235,7 +235,7 @@ class tmp_dir(object):
     disappear upon exit.
     """
 
-    def __init__(self, dir='.', remove=True, tdir=None):
+    def __init__(self, dir='.', remove=True, tdir=None, clear=False):
         """
         dir:
             Directory in which to create the temporary directory.
@@ -249,6 +249,8 @@ class tmp_dir(object):
             If this is set, then dir and remove will be ignored.
             The user-defined tdir director will NOT be removed.
             For debugging into a consistently named directory...
+        clear:
+            Clear contents of the directory if it already exists?
         """
         self.tdir = tdir
         if self.tdir is not None:
@@ -256,6 +258,7 @@ class tmp_dir(object):
         else:
             self.dir = dir
             self.remove = remove
+        self.clear = clear
 
     def _handler(self, sig, frame):
         """Called when user does Ctrl-C (SIGINT)"""
@@ -264,6 +267,8 @@ class tmp_dir(object):
 
     def __enter__(self):
         if self.tdir is not None:
+            if self.clear:
+                shutil.rmtree(self.tdir)
             os.makedirs(self.tdir, exist_ok=True)
             self.tempd = self.tdir
         else:
