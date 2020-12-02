@@ -79,40 +79,63 @@ class ShapefileReader(object):
 class ShapefileWriter(object):
     """Writes Shapely objects into a shapefile"""
 
-    def __init__(self, fname, field_defs):
-        """field_defs: ((name,type), ...)
+    def __init__(self, fname, shapely_type, field_defs):
+        """
+        fname:
+            Name of file to create
+        shapely_type: str
+            Type of Shapely object that will be written here
+            Eg: 'Polygon', 'MultiPolygon'
+        field_defs: ((name,type), ...)
             name: Name of attribute field
             type: ogr.OFTInteger, etc.
                   https://gdal.org/java/org/gdal/ogr/ogrConstants.html
         """
-        ogr_type = shapely2ogr[shapely_obj.geom_type]
+        self.fname = fname
+        self.field_defs = field_defs
+        self.shapely_type = shapely_type
+
+    def __enter__(self):
+        ogr_type = shapely2ogr[self.shapely_type]
 
         # Now convert it to a shapefile with OGR    
-        driver = ogr.GetDriverByName('Esri Shapefile')
-        ds = driver.CreateDataSource(fname)
-        layer = ds.CreateLayer('', None, ogr_type)
+        self.driver = ogr.GetDriverByName('Esri Shapefile')
+        self.ds = self.driver.CreateDataSource(self.fname)
+        self.layer = self.ds.CreateLayer('', None, ogr_type)
 
-        # Add one attribute
-        for name,ftype in field_defs:
-            layer.CreateField(ogr.FieldDefn(name, ftype))
-        #layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
-        defn = layer.GetLayerDefn()
+        # Add attributes
+#        print('fd ',self.field_defs)
+        for name,ftype in self.field_defs:
+            self.layer.CreateField(ogr.FieldDefn(name, ftype))
+        #self.layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
+
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.layer = None
 
     def write(self, shapely_obj, **fields):
+#        if shapely_obj.geom_type != self.shapely_type:
+#            raise TypeError('Trying to write an object of type {} to a file of type {}'.format(shapely_obj.geom_type, self.shapely_type))
+
+#        ogr_type = shapely2ogr[shapely_obj.geom_type]
+
         ## If there are multiple geometries, put the "for" loop here
 
         # Create a new feature (attribute and geometry)
+        defn = self.layer.GetLayerDefn()
         feat = ogr.Feature(defn)
-        feat.SetField('id', 123)
+        for field,value in fields.items():
+            feat.SetField(field, value)
 
         # Make a geometry, from Shapely object
         geom = ogr.CreateGeometryFromWkb(shapely_obj.wkb)
         feat.SetGeometry(geom)
 
-        layer.CreateFeature(feat)
+        self.layer.CreateFeature(feat)
 
         # ------- Local variables are all destroyed
         # feat = geom = None  # destroy these
         # Save and close everything
-        # ds = layer = feat = geom = None
+        # ds = self.layer = feat = geom = None
 
