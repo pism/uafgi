@@ -199,6 +199,40 @@ def dc_matrix(d_dyx, divable, dyx, rows,cols,vals,
     curl_matrix((d_dy_present, d_dx_present), divable, dyx, rows,cols,vals, rowoffset=n1)
 
 # -------------------------------------------------------
+def strainrate_matrix(divable, dyx, rows,cols,vals,
+    factor=1.0, rowoffset=0):
+
+    # Add to coloffset = select between input (v,u)
+    # Add to rowoffset = select between output items
+    n1 = divable.shape[0] * divable.shape[1]
+
+    # Col offsets:
+    vv = 0
+    uu = n1
+    # Row offsets:
+    dvy_dy = 0*n1
+    dvy_dx = 1*n1
+    dvx_dy = 2*n1
+    dvy_dy = 3*n1
+
+    # dvy/dy
+    d_dy_present(divable, dyx[0], indexing, rows,cols,vals, factor,
+        coloffset=vv, rowoffset=dvy_dy)
+    # dvy/dx
+    d_dy_present(divable, dyx[1], indexing, rows,cols,vals, factor,
+        coloffset=vv, rowoffset=dvy_dx)
+    # dvy/dy
+    d_dy_present(divable, dyx[0], indexing, rows,cols,vals, factor,
+        coloffset=uu, rowoffset=dvy_dy)
+    # dvy/dx
+    d_dy_present(divable, dyx[1], indexing, rows,cols,vals, factor,
+        coloffset=uu, rowoffset=dvy_dx)
+
+
+
+
+
+# -------------------------------------------------------
 def get_divable(idomain2):
 
     """Returns a domain 2D ndarray (true/false) indicating where the
