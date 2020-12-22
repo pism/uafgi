@@ -4,28 +4,31 @@ from uafgi import make
 from uafgi.make import ncmake
 import re
 
-class extract(object):
-    # DEPRECATED DEPRECATED DEPRECATED DEPRECATED DEPRECATED DEPRECATED
-    # See uaf.regrid.extract_region
-    """Extracts a local version of bedmachine file
+class extract_region_separate_files(object):
+    """Extracts a local version of a large-area / hi-res file
+    Writes output in 1 variable per file
 
-    global_bedmachine_path:
-        Name of basic bedmachine file (after fixup_pism)
     grid: str
-        NSIDC name of local glacier grid (eg: 'W69.10N')
+        Name of local grid (eg: 'W69.10N')
+    global_data:
+        Name of basic bedmachine file (after fixup_pism)
     data_path:
-        Any old file with x(x) and y(y) coordinate variables
+        Any old file with x(x) and y(y) coordinate variables of target region
+    vnames:
+        Names of variables in the file to extract (each will go to its own file)
+    odir:
+        Output director where to place results
     """
-    def __init__(self, makefile, grid, global_bedmachine_path, data_path, odir):
-        self.vnames = ('thickness', 'bed')
+    def __init__(self, makefile, grid, global_data, data_path, vnames, odir):
+        self.vnames = vnames
         outputs = list()
         for vname in self.vnames:
-            ofname = make.opath(global_bedmachine_path, odir, '_'+grid+'_'+vname)
+            ofname = make.opath(global_data, odir, '_'+grid+'_'+vname)
             ofname = os.path.splitext(ofname)[0] + '.nc'
             outputs.append(ofname)
 
         self.rule = makefile.add(self.run,
-            (global_bedmachine_path, data_path),
+            (global_data, data_path),
             outputs)
 
     def run(self):
@@ -63,7 +66,6 @@ class extract(object):
             subprocess.run(self.cmd, check=True)
 
 
-####### DEPRECATED!!!!!!!
 trimRE = re.compile(r'(.*)_([^_]*)(\..*)')
 class merge(object):
     """Merges variables of two BedMachine files produced by extract(), into one."""
@@ -80,29 +82,12 @@ class merge(object):
         subprocess.run(cmd, check=True)
         
 
-class fixup_pism0(object):
-    """Fixup bedmachine file for use as PISM input file
-    ipath:
-        Name of BedMachine file
-    odir:
-        Place to put output BedMachine file
-    """
-    def __init__(self, makefile, ipath, odir):
-        self.rule = makefile.add(self.run,
-            (ipath,), (make.opath(ipath, odir, '_pism'),))
+def extract_region(makefile, grid, global_data, data_path, vnames, odir):
+    """Macro: extracts all variables from one file, stores in another."""
 
-    def run(self):
-        # Reverse the direction of the Y coordinate
-        cmd = ['ncpdq', '-O', '-a', '-y', self.rule.inputs[0], self.rule.outputs[0]]
-        subprocess.run(cmd, check=True)
+    # Create one extract file per variable
+    rule = extract_region_separate_files(makefile, grid, global_data, data_path, vnames, odir).rule
 
-def fixup_pism(makefile, ipath, odir):
-    """
-    ipath:
-        Name of BedMachine file
-    odir:
-        Place to put output BedMachine file
-    """
-    rule = fixup_pism0(makefile, ipath, odir).rule
-    rule = ncmake.nccompress(makefile, rule.outputs).rule
-    return rule
+    # Merge multiple extract files into one
+    xrule = merge(makefile, rule.outputs, odir)
+    return xrule

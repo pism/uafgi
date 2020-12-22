@@ -37,7 +37,7 @@ class merge_component(object):
         cdo = Cdo()
 
         # Merge into the mergefile
-        cdoutil.large_merge(
+        cdoutil.do_merge(
             cdo.mergetime,
             input=self.rule.inputs,
             output=self.rule.outputs[0],
