@@ -2,6 +2,8 @@ from uafgi import regrid,cdoutil,ioutil,make
 from cdo import Cdo
 import os
 import datetime
+import subprocess
+import netCDF4
 
 def process_year(ifname, year, grid_file, ofname, tdir):
     """Transforms an Its-Live file from original format to one ready to
@@ -24,13 +26,31 @@ def process_year(ifname, year, grid_file, ofname, tdir):
         time_bounds = (datetime.datetime(year,1,1), datetime.datetime(year,12,31))
         reftime = datetime.date(year,1,1)
         cdoutil.set_time_axis(tmp_v1, tmp_v2, time_bounds, reftime)
-        
+
+
+        # Fix units
+        with netCDF4.Dataset(tmp_v2, 'a') as nc:
+            ncv = nc.variables[vname]
+            if ncv.units == 'm/y':
+                ncv.units = 'm year-1'
+
         # Add to files to merge
         merge_files.append(tmp_v2)
 
     # Simple merge
+    tmp4 = make.opath(ofname, tdir, '_4.nc')
     print('******** Merging {} -> {}'.format(merge_files, ofname))
-    cdoutil.merge(cdo.merge, merge_files, ofname)
+    cdoutil.merge(cdo.merge, merge_files, tmp4)
+
+    # Rename variables to what PISM expects
+    # HINT: If presence is intended to be optional, then prefix
+    # old variable name with the period character '.', i.e.,
+    # 'ncrename -v .vy,v_ssa_bc'. With this syntax ncrename would
+    # succeed even when no such variable is in the file.
+    tmp_v3 = make.opath(ofname, tdir, '_{}2.nc'.format(vname))
+    cmd = ['ncrename', '-O', '-v', '.vx,u_ssa_bc', '-v', '.vy,v_ssa_bc',
+        tmp4, ofname]
+    subprocess.run(cmd, check=True)
 
 
 def process_years(year_files, years, grid_file, allyear_file, tdir):
