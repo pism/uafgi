@@ -1,8 +1,13 @@
-from osgeo import ogr
+import numpy as np
+import pyproj
+import subprocess
+import pathlib
+
+from osgeo import ogr,gdal
 import shapefile
 import shapely.geometry
-import pyproj
-import numpy as np
+
+from uafgi import cdoutil
 
 shapely2ogr = {
     'Polygon' : ogr.wkbPolygon,
@@ -139,3 +144,109 @@ class ShapefileWriter(object):
         # Save and close everything
         # ds = self.layer = feat = geom = None
 
+
+def get_crs(shapefile):
+    """Reads the coordinate reference system (CRS) of a shapefile.
+
+    shapefile: *.shp
+        The .shp fork of a shapefile
+    Returns:
+        String of CRS
+    """
+
+    with open(shapefile[:-4] + '.prj') as fin:
+        wks_s = next(fin)
+    termini_crs = pyproj.CRS.from_string(wks_s)
+
+
+def select_feature(ishapefile, fid, oshapefile):
+    """Selects a single feature out of a shapefile and stores into a new shapefile
+    ishapefile:
+        Input shapefile
+    fid:
+        ID of feature to select (0-based)
+    oshapefile:
+        Output shapefile
+    """
+
+    # Select a single polygon out of the shapefile
+    cmd = ['ogr2ogr', oshapefile, ishapefile, '-fid', str(fid)]
+    subprocess.run(cmd, check=True)
+
+def fjord_mask(termini_closed_file, index, geometry_file, tdir):
+    """Converts a closed polygon in a shapefile into
+
+    termini_closed_file:
+        Shapefile containing the closed terminus polygons.
+        One side of the polygon is the terminus; the rest is nearby parts of the fjord.
+    index:
+        Which polygon (stargin with 0) in the terminus shapefile to use.
+    tdir: ioutil.TmpDir
+        Location for temporary files
+    """
+
+    with ioutil.tmp_dir(odir, tdir='tdir') as tdir:
+
+        one_terminus = os.path.join(tdir, 'one_terminus.shp')
+        select_feature(termini_closed_file, index, one_terminus)
+
+        # Cut the bedmachine file based on the shape
+        cut_geometry_file = os.path.join(tdir, 'cut_geometry_file.nc')
+        cmd = ['gdalwarp', '-cutline', one_terminus, 'NETCDF:{}:bed'.format(geometry_file), cut_geometry_file]
+        subprocess.run(cmd, check=True)
+
+        # Read the fjord mask from that file
+        with netCDF4.Dataset(cut_geometry_file) as nc:
+            fjord = nc.variables['Band1'][:].mask
+
+    return fjord
+
+
+def check_error(err):
+    if err != 0:
+        raise 'GDAL Error {}'.format(err)
+
+def rasterize_polygons(shapefile, fids, gridfile, tdir):
+    """Generator yields rasterized version of polygons from shapefile.
+
+    shapefile:
+        Name of the shapefile containing the polygon to rasterize
+    layers:
+        Iterable of layers (sections of the shapefile) to rasterize
+        Can be either indices (0-based), or names of layers
+    gridfile:
+        Name of NetCDF file containing projection, x, y etc. variables of local grid.
+        Fine if it also contains data.
+    Yields:
+        Each specified layer in the shapefile, rasterized
+    """
+
+
+    fb = cdoutil.FileBounds(gridfile)
+
+    maskvalue = 1
+
+    for fid in fids:
+
+        # Select single feature into a file
+        # https://gis.stackexchange.com/questions/330811/how-to-rasterize-individual-feature-polygon-from-shapefile-using-gdal-ogr-in-p
+        one_shape = tdir.join('one_shape.shp')
+        select_feature(shapefile, fid, one_shape)
+        print(pathlib.Path(one_shape).stat().st_size)
+
+        src_ds = ogr.Open(one_shape)
+        src_lyr = src_ds.GetLayer()   # Put layer number or name in her
+
+        dst_ds = gdal.GetDriverByName('netCDF').Create('x{}.nc'.format(fid), int(fb.nx), int(fb.ny), 1 ,gdal.GDT_Byte)
+#        dst_ds = gdal.GetDriverByName('MEM').Create('', int(fb.nx), int(fb.ny), 1 ,gdal.GDT_Byte)
+        dst_rb = dst_ds.GetRasterBand(1)
+        dst_rb.Fill(0) #initialise raster with zeros
+        dst_rb.SetNoDataValue(0)
+        dst_ds.SetGeoTransform(fb.geotransform)
+
+        check_error(gdal.RasterizeLayer(dst_ds, [1], src_lyr, burn_values=[maskvalue]))
+
+        dst_ds.FlushCache()
+
+        mask_arr=dst_ds.GetRasterBand(1).ReadAsArray()
+        yield mask_arr

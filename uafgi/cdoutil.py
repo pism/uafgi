@@ -3,6 +3,7 @@ import os.path
 from uafgi import ioutil
 import netCDF4
 import cf_units
+from uafgi import functional
 
 """Utilities for working with the Python CDO interface"""
 def _large_merge(cdo_merge_operator, input, output, tmp_files, max_merge=30, **kwargs):
@@ -100,3 +101,80 @@ def set_time_axis(ifname, ofname, time_bounds, reftime):
             tbv[0,ix] = cfu.date2num(time)
 
 
+# --------------------------------------------------
+def compress(ipath, opath):
+    """Compress a NetCDF file"""
+    cmd = ['ncks', '-4', '-L', '1', ipath, opath]
+    subprocess.run(cmd, check=True)
+# --------------------------------------------------
+@functional.memoize
+class FileBounds(object):
+    """Reads spatial extents from NetCDF file.
+    May be used, eg, as:
+                '-projwin', str(x0), str(y1), str(x1), str(y0),
+                '-tr', str(dx), str(dy),
+    Returns:
+        self.x0, self.x1:
+            Min, max of region in the file
+        self.dx:
+            Grid spacing in x direction
+        welf.wks_s:
+            Coordinate reference system (CRS) used in the file
+    """
+    def __init__(self, grid_file):
+        """Obtains bounding box of a grid.
+        Returns: x0,x1,y0,y1
+        """
+
+        with netCDF4.Dataset(grid_file) as nc:
+            xx = nc.variables['x'][:]
+            self.nx = len(xx)
+            self.dx = xx[1]-xx[0]
+            half_dx = .5 * self.dx
+            self.x0 = round(xx[0] - half_dx)
+            self.x1 = round(xx[-1] + half_dx)
+
+            yy = nc.variables['y'][:]
+            self.ny = len(yy)
+            self.dy = yy[1]-yy[0]
+            half_dy = .5 * self.dy
+            self.y0 = round(yy[0] - half_dy)
+            self.y1 = round(yy[-1] + half_dy)
+
+            self.crs = nc.variables['polar_stereographic'].spatial_ref
+
+            ncv = nc.variables['polar_stereographic']
+            if hasattr(ncv, 'GeoTransform'):
+                sgeotransform = ncv.GeoTransform
+                self.geotransform = tuple(float(x) for x in sgeotransform.split(' ') if len(x) > 0)
+
+
+# --------------------------------------------------------
+def extract_region(ifname, grid_file, vname, ofname):
+    """ifname:
+        Name of input file from which to extract the region
+    grid_file:
+        Name of file containing x and y grid coordinate values
+    vname:
+        Name of (single) variable to extract
+    ofname:
+        Name of output files
+    """
+
+    fb = FileBounds(grid_file)
+
+    # For Jakobshavn: gdal_translate
+    #    -r average -projwin -219850 -2243450 -132050 -2318350 
+    #    -tr 100 100
+    #    NETCDF:outputs/bedmachine/BedMachineGreenland-2017-09-20_pism.nc4:thickness
+    #    ./out4.nc
+
+    cmd = ['gdal_translate',
+        '-r', 'average',
+        '-projwin', str(fb.x0), str(fb.y1), str(fb.x1), str(fb.y0),
+        '-tr', str(fb.dx), str(fb.dy),
+        'NETCDF:' + ifname + ':'+vname,
+        ofname]
+
+    #print('*********** ', ' '.join(cmd))
+    subprocess.run(cmd, check=True)

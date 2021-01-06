@@ -19,6 +19,7 @@ import netCDF4
 import sys
 import os
 import shutil
+import subprocess
 
 # Copy a netCDF file (so we can add more stuff to it)
 class copy_nc(object):
@@ -251,3 +252,5 @@ def install_nc(ifname, odir, installed=None):
     finally:
         if nc is not None:
             nc.close()
+
+# -----------------------------------------------------------

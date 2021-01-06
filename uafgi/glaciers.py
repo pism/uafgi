@@ -3,100 +3,55 @@ from cdo import Cdo
 from uafgi import nsidc
 from uafgi import giutil,cdoutil,make
 
-# -------------------------------------------------------------------------
-class merge_component(object):
-    """Makefile macro, create one component of a glacier file by merging individual frames.
+class IceRemover2(object):
 
-    idir:
-        Input directory of GeoTIFF files
-    odir:
-        Directory for output files
-    filter_attrs:
-        File name portion (PFile) attributes used to filter files in idir.
-        Should contain at least source, grid, parameter
-    ofpattern:
-        Eg: '{source}_{grid}_2008_2020.nc'
-    blacklist:
-        Files to NOT include
-    max_files:
-        Maximum number of files to include
-    """
+    def __init__(self, bedmachine_file):
+        """bedmachine-file: Local extract from global BedMachine"""
+        self.bedmachine_file = bedmachine_file
+        with netCDF4.Dataset(self.bedmachine_file) as nc:
 
-    def __init__(self, makefile, idir, parse_fn, odir, filter_attrs=dict(), **kwargs):
+            # ------- Read original thickness and bed
+            self.thk = nc.variables['thickness'][:]
 
-        rule = nsidc.tiffs_to_netcdfs(makefile, idir, parse_fn, odir, filter_attrs=filter_attrs, **kwargs).rule
+    def get_thk(self, termini_closed_file, index, odir):
+        """Yields an ice thickness field that's been cut off at the terminus trace0
+        trace0: (gline_xx,gline_yy)
+            output of iter_traces()
+        """
 
-        # Start a new mergefile
-        inputs = rule.outputs
-        output = os.path.join(odir, '{source}_{grid}_{parameter}_merged.nc'.format(**filter_attrs))
+        with ioutil.tmp_dir(odir, tdir='tdir') as tdir:
+#        if True:
+            # Select a single polygon out of the shapefile
+            one_terminus = os.path.join(tdir, 'one_terminus_closed.shp')
+            cmd = ['ogr2ogr', one_terminus, termini_closed_file, '-fid', str(index)]
+            subprocess.run(cmd, check=True)
 
-        self.rule = makefile.add(self.run, inputs, (output,))
+            # Cut the bedmachine file based on the shape
+            cut_geometry_file = os.path.join(tdir, 'cut_geometry_file.nc')
+            cmd = ['gdalwarp', '-cutline', one_terminus, 'NETCDF:{}:bed'.format(self.bedmachine_file), cut_geometry_file]
+            subprocess.run(cmd, check=True)
+
+            # Read the fjord mask from that file
+            with netCDF4.Dataset(cut_geometry_file) as nc:
+                fjord = np.logical_not(nc.variables['Band1'][:].mask)
+            print('fjord sum: {} {}'.format(np.sum(np.sum(fjord)), fjord.shape[0]*fjord.shape[1]))
 
 
-    def run(self):
-        cdo = Cdo()
+            # Remove downstream ice
+            thk = np.zeros(self.thk.shape)
+            thk[:] = self.thk[:]
+            thk[fjord] = 0
 
-        # Merge into the mergefile
-        cdoutil.do_merge(
-            cdo.mergetime,
-            input=self.rule.inputs,
-            output=self.rule.outputs[0],
-            options="-f nc4 -z zip_2",
-            max_merge=50)
-# -------------------------------------------------------------------------
-class merge(object):
-    """Makefile macro, create a final glacer file, with all components.
+            return thk
 
-    idir:
-        Input directory of GeoTIFF files
-    odir:
-        Directory for output files
-    filter_attrs:
-        File name portion (PFile) attributes used to filter files in idir.
-        Should contain at least source, grid
-    parameters:
-        List of components ("parameter" in filter_attrs) to process.
-    ofpattern:
-        Format pattern used to determine output filename, including directory.
-        Keys should match up with filter_attrs
-        Eg: 'outputs/{source}_{grid}_2008_2020.nc'
-    blacklist:
-        Files to NOT include
-    max_files:
-        Maximum number of files to include
-    """
-    def __init__(self, makefile, idir, parse_fn, odir, ofpattern, parameters, filter_attrs=dict(), **kwargs):
-        inputs = list()
-        for parameter in parameters:
-            rule = merge_component(makefile, idir, parse_fn, odir,
-                filter_attrs=giutil.merge_dicts(filter_attrs, {'parameter': parameter}), **kwargs).rule
-            inputs += rule.outputs
+            ## Store it...
+            #with netCDF4.Dataset(bedmachine_file, 'r') as nc0:
+            #    with netCDF4.Dataset('x.nc', 'w') as ncout:
+            #        cnc = ncutil.copy_nc(nc0, ncout)
+            #        vars = list(nc0.variables.keys())
+            #        cnc.define_vars(vars)
+            #        for var in vars:
+            #            if var not in {'thickness'}:
+            #                cnc.copy_var(var)
+            #        ncout.variables['thickness'][:] = thk
 
-        self.rule = makefile.add(self.run, inputs, (ofpattern.format(**filter_attrs),))
-
-    def run(self):
-        print('Merging to {}'.format(self.rule.outputs[0]))
-        cdo = Cdo()
-        cdo.merge(
-            input=self.rule.inputs,
-            output=self.rule.outputs[0],
-            options="-f nc4 -z zip_2")
-# -------------------------------------------------------------------------
-class rename_velocities_for_pism(object):
-    """Fixup merged velocity file
-    ipath:
-        Name of merged velocity file
-    """
-    def __init__(self, makefile, ipath, odir):
-        self.rule = makefile.add(self.run,
-            (ipath,), (make.opath(ipath, odir, '_pism'),))
-
-    def run(self):
-        # Rename variables
-        # HINT: If presence is intended to be optional, then prefix
-        # old variable name with the period character '.', i.e.,
-        # 'ncrename -v .vy,v_ssa_bc'. With this syntax ncrename would
-        # succeed even when no such variable is in the file.
-        cmd = ['ncrename', '-O', '-v', '.vx,u_ssa_bc', '-v', '.vy,v_ssa_bc',
-            self.rule.inputs[0], self.rule.outputs[0]]
-        subprocess.run(cmd, check=True)

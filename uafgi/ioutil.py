@@ -201,34 +201,7 @@ def search_file(filename, search_path):
      else:
          return None
 
-class TmpFiles(object):
-    def __init__(self, root):
-        self.root = root
-        self.next_tmp = 0
-
-    def __next__(self):
-        """Get a tmp filename"""
-        ret = '{}_{}'.format(self.root, self.next_tmp)
-        self.next_tmp += 1
-        return ret
-
-    def __enter__(self):
-        return self
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        for i in range(0,self.next_tmp):
-            try:
-                os.remove('{}_{}'.format(self.root, i))
-            except FileNotFoundError:
-                pass
-
-#@contextlib.contextmanager
-#def tmp_dir(dir='.'):
-#    tempd = tempfile.mkdtemp(dir=dir)
-#    yield tempd
-#    shutil.rmtree(tempd)
-
-
-class tmp_dir(object):
+class TmpDir(object):
     """Context manager that creates a temporary directory, which will be
     removed upon exit, or even Ctrl-C.  The caller can put files in
     the temporary directory that is created; and they will all
@@ -279,7 +252,7 @@ class tmp_dir(object):
             # https://stackoverflow.com/questions/22916783/reset-python-sigint-to-default-signal-handler
             self.original_sigint_handler = signal.getsignal(signal.SIGINT)
             signal.signal(signal.SIGINT, self._handler)
-        return self.tempd
+        return self
 
     def _remove(self):
         if self.remove:
@@ -289,31 +262,97 @@ class tmp_dir(object):
     def __exit__(self, exc_type, exc_value, exc_traceback):
         self._remove()
 
-# Also see:
-def temporaryFilename(prefix=None, suffix='tmp', dir=None, text=False, removeOnExit=True):
-    """Returns a temporary filename that, like mkstemp(3), will be secure in
-    its creation.  The file will be closed immediately after it's created, so
-    you are expected to open it afterwards to do what you wish.  The file
-    will be removed on exit unless you pass removeOnExit=False.  (You'd think
-    that amongst the myriad of methods in the tempfile module, there'd be
-    something like this, right?  Nope.)"""
+    # -------------------- Uses for tdir
+    def join(self, *args):
+        """Produces a file with a specific name inside the tdir"""
+        return os.path.join(self.tempd, *args)
 
-    if prefix is None:
-        prefix = "%s_%d_" % (os.path.basename(sys.argv[0]), os.getpid())
+    text_by_mode = {
+        'r' : True,
+        'rt' : True,
+        'rb' : False}
+    def open(self, suffix=None, prefix=None, mode='rt'):
+        """Creates a temporary file in the most secure manner possible. There
+        are no race conditions in the file’s creation, assuming that
+        the platform properly implements the os.O_EXCL flag for
+        os.open(). The file is readable and writable only by the
+        creating user ID. If the platform uses permission bits to
+        indicate whether a file is executable, the file is executable
+        by no one. The file is not inherited by child
+        processes.
 
-    (fileHandle, path) = tempfile.mkstemp(prefix=prefix, suffix=suffix, dir=dir, text=text)
-    os.close(fileHandle)
+        suffix:
+            Suffix of filename.  If suffix is not None, the file name
+            will end with that suffix, otherwise there will be no
+            suffix. mkstemp() does not put a dot between the file name
+            and the suffix; if you need one, put it at the beginning
+            of suffix.
 
-    def removeFile(path):
-        os.remove(path)
-        logging.debug('temporaryFilename: rm -f %s' % path)
+        prefix:
+            If prefix is not None, the file name will begin with that
+            prefix; otherwise, a default prefix is used. The default
+            is the return value
 
-    if removeOnExit:
-        atexit.register(removeFile, path)
+        mode: 'r', 'rt' or 'rb'
+            File open mode, commensurate with Python IO's open()
+            'r', 'rt' = Open text file
+            'rb' = Open binary file
+        Returns:
+            Python file object, as if opened with open()
+        """
+        handle,path = tmpfile.mkstemp(suffix=suffix, prefix=prefix, dir=self.tempd,
+            text=self.text_by_mode[mode])
+        return os.fdopen(handle, mode='rt' if text else 'rb')
 
-    return path
+
+    def file(self, suffix=None, prefix=None):
+        """Produces a filename"""
+        handle,path = tmpfile.mkstemp(suffix=suffix, prefix=prefix, dir=self.tempd,
+            text=self.text_by_mode[mode])
+        os.close(handle)
+        return path
+
+
+    def opath(self, ipath, suffix, replace=None):
+        """Calls make.opath; to create new filename in temporary dir, based
+        on old filename.
+
+        Converts from [idir]/[ipath][ext] to [odir]/[opath][suffix][ext]
+        ipath:
+            Full pathname of input file
+        """    
+        idir,ileaf = os.path.split(ipath)
+        iroot,iext = os.path.splitext(ileaf)
+        if replace is None:
+            leaf = '{}{}{}'.format(iroot,suffix,iext)
+        else:
+            leaf = '{}{}'.format(iroot.replace(replace, suffix), iext)
+        return os.path.join(self.tempd, leaf)
 
 
 
 
-
+# # Also see:
+# def temporaryFilename(prefix=None, suffix='tmp', dir=None, text=False, removeOnExit=True):
+#     """Returns a temporary filename that, like mkstemp(3), will be secure in
+#     its creation.  The file will be closed immediately after it's created, so
+#     you are expected to open it afterwards to do what you wish.  The file
+#     will be removed on exit unless you pass removeOnExit=False.  (You'd think
+#     that amongst the myriad of methods in the tempfile module, there'd be
+#     something like this, right?  Nope.)"""
+# 
+#     if prefix is None:
+#         prefix = "%s_%d_" % (os.path.basename(sys.argv[0]), os.getpid())
+# 
+#     (fileHandle, path) = tempfile.mkstemp(prefix=prefix, suffix=suffix, dir=dir, text=text)
+#     os.close(fileHandle)
+# 
+#     def removeFile(path):
+#         os.remove(path)
+#         logging.debug('temporaryFilename: rm -f %s' % path)
+# 
+#     if removeOnExit:
+#         atexit.register(removeFile, path)
+# 
+#     return path
+# 
