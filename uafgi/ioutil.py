@@ -305,7 +305,7 @@ class TmpDir(object):
         return os.fdopen(handle, mode='rt' if text else 'rb')
 
 
-    def file(self, suffix=None, prefix=None):
+    def filename(self, suffix=None, prefix=None):
         """Produces a filename"""
         handle,path = tmpfile.mkstemp(suffix=suffix, prefix=prefix, dir=self.tempd,
             text=self.text_by_mode[mode])

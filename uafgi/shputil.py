@@ -250,3 +250,17 @@ def rasterize_polygons(shapefile, fids, gridfile, tdir):
 
         mask_arr=dst_ds.GetRasterBand(1).ReadAsArray()
         yield mask_arr
+
+def crs(shapefile):
+    """Reads the coordinate reference system (CRS) out of a shapefile.
+    (Actually, out of a shapefile's .prj file)
+
+    shapefile:
+        Name of the shapefile (with or without .shp extension)
+    Returns:
+        CRS as a string
+    """
+    fname = os.path.splitext(shapefile)[0] + '.prj'
+    with open(fname) as fin:
+        crs = pyproj.CRS.from_string(next(fin))
+    return crs

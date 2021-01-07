@@ -108,7 +108,7 @@ def compress(ipath, opath):
     subprocess.run(cmd, check=True)
 # --------------------------------------------------
 @functional.memoize
-class FileBounds(object):
+class FileInfo(object):
     """Reads spatial extents from NetCDF file.
     May be used, eg, as:
                 '-projwin', str(x0), str(y1), str(x1), str(y0),
@@ -122,31 +122,55 @@ class FileBounds(object):
             Coordinate reference system (CRS) used in the file
     """
     def __init__(self, grid_file):
-        """Obtains bounding box of a grid.
+        """Obtains bounding box of a grid; and also the time dimension, if it exists.
         Returns: x0,x1,y0,y1
         """
 
         with netCDF4.Dataset(grid_file) as nc:
-            xx = nc.variables['x'][:]
-            self.nx = len(xx)
-            self.dx = xx[1]-xx[0]
-            half_dx = .5 * self.dx
-            self.x0 = round(xx[0] - half_dx)
-            self.x1 = round(xx[-1] + half_dx)
+            # Info on spatial bounds
+            if 'x' in nc.variables:
+                self.xx = nc.variables['x'][:]
+                self.nx = len(self.xx)
+                self.dx = self.xx[1]-self.xx[0]
+                half_dx = .5 * self.dx
+                self.x0 = round(self.xx[0] - half_dx)
+                self.x1 = round(self.xx[-1] + half_dx)
 
-            yy = nc.variables['y'][:]
-            self.ny = len(yy)
-            self.dy = yy[1]-yy[0]
-            half_dy = .5 * self.dy
-            self.y0 = round(yy[0] - half_dy)
-            self.y1 = round(yy[-1] + half_dy)
+                self.yy = nc.variables['y'][:]
+                self.ny = len(self.yy)
+                self.dy = self.yy[1]-self.yy[0]
+                half_dy = .5 * self.dy
+                self.y0 = round(self.yy[0] - half_dy)
+                self.y1 = round(self.yy[-1] + half_dy)
 
-            self.crs = nc.variables['polar_stereographic'].spatial_ref
+                # Info on the coordinate reference system (CRS)
+                self.crs = nc.variables['polar_stereographic'].spatial_ref
 
-            ncv = nc.variables['polar_stereographic']
-            if hasattr(ncv, 'GeoTransform'):
-                sgeotransform = ncv.GeoTransform
-                self.geotransform = tuple(float(x) for x in sgeotransform.split(' ') if len(x) > 0)
+                ncv = nc.variables['polar_stereographic']
+                if hasattr(ncv, 'GeoTransform'):
+                    sgeotransform = ncv.GeoTransform
+                    self.geotransform = tuple(float(x) for x in sgeotransform.split(' ') if len(x) > 0)
+
+            # Info on time units
+            if 'time' in nc.variables:
+                nctime = vnc.variables['time']
+
+                # Times in original form
+                self.time_units = cf_units.Unit(nctime.units, nctime.calendar)
+                self.times = vnc.variables['time'][:]    # "days since <refdate>
+
+                # Convert to Python datetimes
+                self.datetimes = [self.time_units.num2date(t_d)
+                    for t_d in self.times]
+
+                # Convert to times in "seconds since <refdate>"
+                self.time_units_s = cfutil.replace_reftime_unit(
+                    self.time_units, 'seconds')
+                self.times_s = [self.time_units.convert(t_d, self.units_s)
+                    for t_d in self.times]
+
+
+
 
 
 # --------------------------------------------------------
@@ -178,3 +202,5 @@ def extract_region(ifname, grid_file, vname, ofname):
 
     #print('*********** ', ' '.join(cmd))
     subprocess.run(cmd, check=True)
+# -------------------------------------------------
+
