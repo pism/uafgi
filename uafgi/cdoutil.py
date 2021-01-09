@@ -3,7 +3,7 @@ import os.path
 from uafgi import ioutil
 import netCDF4
 import cf_units
-from uafgi import functional
+from uafgi import functional,cfutil
 
 """Utilities for working with the Python CDO interface"""
 def _large_merge(cdo_merge_operator, input, output, tmp_files, max_merge=30, **kwargs):
@@ -153,11 +153,11 @@ class FileInfo(object):
 
             # Info on time units
             if 'time' in nc.variables:
-                nctime = vnc.variables['time']
+                nctime = nc.variables['time']
 
                 # Times in original form
                 self.time_units = cf_units.Unit(nctime.units, nctime.calendar)
-                self.times = vnc.variables['time'][:]    # "days since <refdate>
+                self.times = nc.variables['time'][:]    # "days since <refdate>
 
                 # Convert to Python datetimes
                 self.datetimes = [self.time_units.num2date(t_d)
@@ -166,7 +166,7 @@ class FileInfo(object):
                 # Convert to times in "seconds since <refdate>"
                 self.time_units_s = cfutil.replace_reftime_unit(
                     self.time_units, 'seconds')
-                self.times_s = [self.time_units.convert(t_d, self.units_s)
+                self.times_s = [self.time_units.convert(t_d, self.time_units_s)
                     for t_d in self.times]
 
 

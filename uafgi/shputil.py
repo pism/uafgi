@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pyproj
 import subprocess
@@ -222,7 +223,7 @@ def rasterize_polygons(shapefile, fids, gridfile, tdir):
     """
 
 
-    fb = cdoutil.FileBounds(gridfile)
+    fb = cdoutil.FileInfo(gridfile)
 
     maskvalue = 1
 

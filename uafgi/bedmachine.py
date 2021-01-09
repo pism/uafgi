@@ -1,6 +1,6 @@
 import os,subprocess
 import netCDF4
-from uafgi import make
+from uafgi import make,ncutil
 from uafgi.make import ncmake
 import re
 
