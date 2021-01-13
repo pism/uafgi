@@ -229,7 +229,7 @@ def rasterize_polygons(shapefile, fids, gridfile, tdir):
 
     for fid in fids:
 
-        # Select single feature into a file
+        # Select single feature into a shapefile
         # https://gis.stackexchange.com/questions/330811/how-to-rasterize-individual-feature-polygon-from-shapefile-using-gdal-ogr-in-p
         one_shape = tdir.join('one_shape.shp')
         select_feature(shapefile, fid, one_shape)
@@ -238,8 +238,8 @@ def rasterize_polygons(shapefile, fids, gridfile, tdir):
         src_ds = ogr.Open(one_shape)
         src_lyr = src_ds.GetLayer()   # Put layer number or name in her
 
-        dst_ds = gdal.GetDriverByName('netCDF').Create('x{}.nc'.format(fid), int(fb.nx), int(fb.ny), 1 ,gdal.GDT_Byte)
-#        dst_ds = gdal.GetDriverByName('MEM').Create('', int(fb.nx), int(fb.ny), 1 ,gdal.GDT_Byte)
+#        dst_ds = gdal.GetDriverByName('netCDF').Create('x{}.nc'.format(fid), int(fb.nx), int(fb.ny), 1 ,gdal.GDT_Byte)
+        dst_ds = gdal.GetDriverByName('MEM').Create('', int(fb.nx), int(fb.ny), 1 ,gdal.GDT_Byte)
         dst_rb = dst_ds.GetRasterBand(1)
         dst_rb.Fill(0) #initialise raster with zeros
         dst_rb.SetNoDataValue(0)
@@ -249,7 +249,7 @@ def rasterize_polygons(shapefile, fids, gridfile, tdir):
 
         dst_ds.FlushCache()
 
-        mask_arr=dst_ds.GetRasterBand(1).ReadAsArray()
+        mask_arr=np.flipud(dst_ds.GetRasterBand(1).ReadAsArray())
         yield mask_arr
 
 def crs(shapefile):
