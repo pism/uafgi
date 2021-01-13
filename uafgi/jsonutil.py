@@ -1,8 +1,19 @@
 import json
 from gdal import ogr,osr
-from uafgi import cdoutil,ncutil
+from uafgi import cdoutil,ncutil,functional
 import gdal
 import numpy as np
+
+@functional.memoize
+def gdal_srs():
+    """GeoJSON files are all EPSG 4326 (lon/lat coordinates)"""
+
+    inSpatialRef = osr.SpatialReference()
+    inSpatialRef.ImportFromEPSG(4326)
+    inSpatialRef.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+
+    return inSpatialRef
+
 
 def iter_features(trace_file):
     """Iterate through featuress of a GeoJSON file (in lon/lat coordinates).
@@ -147,9 +158,8 @@ def load_layer(polygon_file, gridfile):
     src_ds = driver.Open(polygon_file)
     src_lyr = src_ds.GetLayer()   # Put layer number or name in her
 
-    inSpatialRef = osr.SpatialReference()
-    inSpatialRef.ImportFromEPSG(4326)
-    inSpatialRef.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    inSpatialRef = gdal_srs()
+
 
 #    outSpatialRef = osr.SpatialReference()
 #    outSpatialRef.ImportFromEPSG(3413)
@@ -176,9 +186,7 @@ def load_layer(polygon_file, gridfile):
         dst_lyr.CreateFeature(dst_feature)
         dst_feature = None
 
-
-
-
+    return dst_ds
 
 
 
@@ -193,16 +201,8 @@ def rasterize_polygon(polygon_file, gridfile, tdir):
     Yields:
         Each specified layer in the polygon_file, rasterized
     """
-    src_ds = ogr.Open(polygon_file)
-    print(src_ds)
+    src_ds = load_layer(polygon_file, gridfile)
     src_lyr = src_ds.GetLayer()   # Put layer number or name in her
-
-
-    # Reproject
-    geom = src_lyr.GetGeometryRef()
-    print(geom)
-    return
-
 
     print(src_lyr, src_lyr.GetExtent())
     fb = cdoutil.FileInfo(gridfile)

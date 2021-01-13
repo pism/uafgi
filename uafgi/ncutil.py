@@ -20,6 +20,7 @@ import sys
 import os
 import shutil
 import subprocess
+import contextlib
 
 # Copy a netCDF file (so we can add more stuff to it)
 class copy_nc(object):
@@ -254,3 +255,15 @@ def install_nc(ifname, odir, installed=None):
             nc.close()
 
 # -----------------------------------------------------------
+@contextlib.contextmanager
+def reopen_nc(file):
+    """Context manager that either:
+    a) If file is a a netCDF4 handle, just returns it
+    b) Otherwise, opens netCDF4.Dataset(file, 'r')
+    """
+
+    if isinstance(file, netCDF4.Dataset):
+        yield file
+    else:
+        with netCDF4.Dataset(file) as nc:
+            yield nc
