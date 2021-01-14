@@ -22,7 +22,7 @@ def fix_output(output_file3, exception, time_units_s, output_file4):
     # Convert to NetCDF
     cmd = ['ncks', '-4', '-L', '1', '-O', output_file3, output_file4]
     subprocess.run(cmd, check=True)
-    os.remove(output_file3)
+    #os.remove(output_file3)
 
     # Fix up time units to be CF compliant
     with netCDF4.Dataset(output_file4, 'a') as nc:
