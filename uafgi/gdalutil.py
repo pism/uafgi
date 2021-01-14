@@ -1,6 +1,6 @@
 import numpy as np
-import netCDF4
-from uafgi import functional,ogrutil
+import netCDF4, cf_units
+from uafgi import functional,ogrutil,cfutil
 from osgeo import osr,ogr,gdal
 
 def check_error(err):
