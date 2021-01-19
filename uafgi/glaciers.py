@@ -3,9 +3,11 @@ import netCDF4
 import os,subprocess
 from cdo import Cdo
 from uafgi import nsidc
-from uafgi import giutil,cdoutil,make,ioutil
+from uafgi import giutil,cdoutil,make,ioutil,gicollections
+import pandas as pd
 
 class IceRemover2(object):
+    """Remove ice from a glacier trough, up to a grounding line."""
 
     def __init__(self, bedmachine_file):
         """bedmachine-file: Local extract from global BedMachine"""
@@ -54,4 +56,28 @@ class IceRemover2(object):
         #            if var not in {'thickness'}:
         #                cnc.copy_var(var)
         #        ncout.variables['thickness'][:] = thk
+
+
+# ---------------------------------------------------------------
+# Map of glacier names
+_cols = (
+    'calfin',    # Glacier name used in CALFIN data
+    'nsidc',     # Region code used in NSIDC-0481 (Measures) dataset
+    'fluxgate'   # Name within the fluxgate shapefile
+)
+
+_data = (
+    ('Jakobshavn-Isbrae', 'W69.10N', 'Jakobshavn Isbræ'),
+    ('Rink-Isbrae', 'W71.65N', None),
+    ('Store-Gletsjer', 'W70.55N', None),
+)
+info_df = pd.DataFrame(_data, columns=_cols)
+
+def by_calfin(name):
+    df = info_df
+    print(df)
+    glacier = df.loc[df['calfin'] == name].iloc[0]
+    return glacier
+
+# ---------------------------------------------------------------
 
