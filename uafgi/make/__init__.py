@@ -1,28 +1,7 @@
 import os
-import collections.abc
 import itertools
+from uafgi import ioutil,gicollections
 
-# https://codereview.stackexchange.com/questions/173045/mutable-named-tuple-or-slotted-data-structure
-class MutableNamedTuple(collections.abc.Sequence): 
-    """Abstract Base Class for objects as efficient as mutable
-    namedtuples. 
-    Subclass and define your named fields with __slots__.
-    """
-    __slots__ = ()
-    def __init__(self, *args):
-        for slot, arg in zip(self.__slots__, args):
-            setattr(self, slot, arg)
-    def __repr__(self):
-        return type(self).__name__ + repr(tuple(self))
-    # more direct __iter__ than Sequence's
-    def __iter__(self): 
-        for name in self.__slots__:
-            yield getattr(self, name)
-    # Sequence requires __getitem__ & __len__:
-    def __getitem__(self, index):
-        return getattr(self, self.__slots__[index])
-    def __len__(self):
-        return len(self.__slots__)
 # ---------------------------------------------------
 
 def mod_date(path):
@@ -31,8 +10,15 @@ def mod_date(path):
     else:
         return None
 
-class Rule(MutableNamedTuple):
-    __slots__ = ('inputs', 'outputs', 'action', 'precious')
+class Rule(gicollections.MutableNamedTuple):
+    __slots__ = ('action', 'inputs', 'outputs', 'precious')
+
+    # action() can be called like a function
+
+    def __call__(self):
+        """Useful for one-off calls of a rule, outside of a Makefile"""
+        with ioutil.TmpDir() as tdir:
+            self.action(tdir)
 
 #Rule = collections.namedtuple('Rule', ('inputs', 'outputs', 'action', 'precious'))
 
@@ -41,13 +27,18 @@ class Makefile(object):
     def __init__(self):
         self.rules = dict()    # {target : rule}
 
-    def add(self, action, inputs, outputs):
-        rule = Rule(inputs, outputs, action, False)
-        if action is not None:
-            # Dummy rules aren't added to the dependency DAG
-            for output in outputs:
-                self.rules[output] = rule
-        return rule
+#    def add(self, action, inputs, outputs):
+#        rule = Rule(inputs, outputs, action, False)
+#        if action is not None:
+#            # Dummy rules aren't added to the dependency DAG
+#            for output in outputs:
+#                self.rules[output] = rule
+#        return rule
+
+    def add(self, rule):
+        for output in rule.outputs:
+            self.rules[output] = rule
+        return rule.outputs
 
     def format(self):
         """Converts to a (very long) string"""
@@ -69,11 +60,13 @@ class Makefile(object):
         return '\n'.join(out)
 
 class build(object):
-    def __init__(self, makefile, targets):
+    def __init__(self, makefile, targets, tdir_fn=ioutil.TmpDir):
+        """Call this to create an ioutil.TmpDir"""
         self.makefile = makefile
         self.dates = dict()
         self.made = set()
         self._get_dates(targets)
+        self.tdir_fn = tdir_fn
         self._build(targets)
 
     def _get_dates(self, targets):
@@ -103,6 +96,9 @@ class build(object):
         return target_dates
 
     def _build(self, targets):
+        """tdir_kwargs:
+            kwargs needed to create a new temporary directory (one per rule)
+        """
         for target in targets:
             # Maybe we made it on a previous iteration around this loop
             if target in self.made:
@@ -123,7 +119,8 @@ class build(object):
                     rule = self.makefile.rules[target]
                     self._build(rule.inputs)
                     print('========================== Building {} {}'.format(rule.outputs[0], rule.action))
-                    rule.action()
+                    with self.tdir_fn() as tdir:    # See ioutil.TmpDir
+                        rule.action(tdir)
 
                     # Add to the set of things we've made
                     self.made.update(rule.outputs)
