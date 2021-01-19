@@ -263,6 +263,10 @@ class TmpDir(object):
         self._remove()
 
     # -------------------- Uses for tdir
+    def subdir(self, **kwargs):
+        """Create a temporary subdirectory."""
+        return TmpDir(dir=self.tdir, **kwargs)
+
     def join(self, *args):
         """Produces a file with a specific name inside the tdir"""
         return os.path.join(self.tempd, *args)
