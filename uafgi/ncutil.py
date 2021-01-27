@@ -256,7 +256,7 @@ def install_nc(ifname, odir, installed=None):
 
 # -----------------------------------------------------------
 @contextlib.contextmanager
-def reopen_nc(file):
+def open(file, *args):
     """Context manager that either:
     a) If file is a a netCDF4 handle, just returns it
     b) Otherwise, opens netCDF4.Dataset(file, 'r')
@@ -265,5 +265,5 @@ def reopen_nc(file):
     if isinstance(file, netCDF4.Dataset):
         yield file
     else:
-        with netCDF4.Dataset(file) as nc:
+        with netCDF4.Dataset(file, *args) as nc:
             yield nc
