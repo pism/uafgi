@@ -3,10 +3,11 @@ import os.path
 from uafgi import ioutil
 import netCDF4
 import cf_units
-from uafgi import functional,cfutil
+import subprocess
+from uafgi import functional,cfutil,gdalutil
 
 """Utilities for working with the Python CDO interface"""
-def _large_merge(cdo_merge_operator, input, output, tmp_files, max_merge=30, **kwargs):
+def _large_merge(cdo_merge_operator, input, output, tdir, max_merge=30, **kwargs):
     """
     max_merge:
         Maximum number of files to merge in a single CDO command
@@ -21,21 +22,15 @@ def _large_merge(cdo_merge_operator, input, output, tmp_files, max_merge=30, **k
     if len(input) > max_merge:
 
         input1 = list()
-        try:
+        with tdir.subdir() as tdir1:
             chunks = [input[x:x+max_merge] for x in range(0, len(input), max_merge)]
             for chunk in chunks:
-                ochunk = next(tmp_files)
+                ochunk = tdir.filename()
                 input1.append(ochunk)
-                _large_merge(cdo_merge_operator, chunk, ochunk, tmp_files, max_merge, **kwargs)
+                _large_merge(cdo_merge_operator, chunk, ochunk, tdir1, max_merge, **kwargs)
 
-            _large_merge(cdo_merge_operator, input1, output, tmp_files, max_merge, **kwargs)
-        finally:
-            # Remove our temporary files
-            for path in input1:
-                try:
-                    os.remove(path)
-                except FileNotFoundError:
-                    pass
+            _large_merge(cdo_merge_operator, input1, output, tdir1, max_merge, **kwargs)
+
     else:
 #        print('CDO Merge')
 #        print('INPUT ',input)
@@ -43,7 +38,7 @@ def _large_merge(cdo_merge_operator, input, output, tmp_files, max_merge=30, **k
         cdo_merge_operator(input=input, output=output, **kwargs)
 
 
-def merge(cdo_merge_operator, inputs, output, max_merge=30, **kwargs):
+def merge(cdo_merge_operator, inputs, output, tdir, max_merge=30, **kwargs):
     """Recursively merge large numbers of files using a CDO merge-type operator.
     Also appropriate for "small" merges.
 
@@ -62,8 +57,7 @@ def merge(cdo_merge_operator, inputs, output, max_merge=30, **kwargs):
 
     print('Merging {} files into {}'.format(len(inputs), output))
     odir = os.path.split(output)[0]
-    with ioutil.TmpFiles(os.path.join(odir, 'tmp')) as tmp_files:
-        _large_merge(cdo_merge_operator, inputs, output, tmp_files, max_merge=max_merge, **kwargs)
+    _large_merge(cdo_merge_operator, inputs, output, tdir, max_merge=max_merge, **kwargs)
 
 # -------------------------------------------------------------
 def set_time_axis(ifname, ofname, time_bounds, reftime):
@@ -120,7 +114,7 @@ def extract_region(ifname, grid_file, vname, ofname):
         Name of output files
     """
 
-    fb = FileBounds(grid_file)
+    fb = gdalutil.FileInfo(grid_file)
 
     # For Jakobshavn: gdal_translate
     #    -r average -projwin -219850 -2243450 -132050 -2318350 
