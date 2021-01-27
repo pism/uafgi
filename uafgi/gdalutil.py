@@ -1,6 +1,6 @@
 import numpy as np
 import netCDF4, cf_units
-from uafgi import functional,ogrutil,cfutil
+from uafgi import functional,ogrutil,cfutil,ncutil
 from osgeo import osr,ogr,gdal
 
 def check_error(err):
@@ -9,6 +9,14 @@ def check_error(err):
 
     if err != 0:
         raise GDALException('GDAL Error {}'.format(err))
+
+def open(fname, driver=None, **kwargs):
+    """Opens a GDAL datasource.  Raises exception if not found."""
+    ds = ogr.GetDriverByName(driver).Open(fname, **kwargs)
+    if ds is None:
+        raise FileNotFoundException(fname)
+    return ds
+
 
 @functional.memoize
 class FileInfo(object):
@@ -33,7 +41,7 @@ class FileInfo(object):
         Returns: x0,x1,y0,y1
         """
 
-        with netCDF4.Dataset(grid_file) as nc:
+        with ncutil.open(grid_file) as nc:
             # Info on spatial bounds
             if 'x' in nc.variables:
                 self.xx = nc.variables['x'][:]
@@ -51,12 +59,13 @@ class FileInfo(object):
                 self.y1 = round(self.yy[-1] + half_dy)
 
                 # Info on the coordinate reference system (CRS)
-                self.srs = osr.SpatialReference(wkt=nc.variables['polar_stereographic'].spatial_ref)
+                if 'polar_stereographic' in nc.variables:
+                    ncv = nc.variables['polar_stereographic']
+                    self.srs = osr.SpatialReference(wkt=ncv.spatial_ref)
 
-                ncv = nc.variables['polar_stereographic']
-                if hasattr(ncv, 'GeoTransform'):
-                    sgeotransform = ncv.GeoTransform
-                    self.geotransform = tuple(float(x) for x in sgeotransform.split(' ') if len(x) > 0)
+                    if hasattr(ncv, 'GeoTransform'):
+                        sgeotransform = ncv.GeoTransform
+                        self.geotransform = tuple(float(x) for x in sgeotransform.split(' ') if len(x) > 0)
 
             # Info on time units
             if 'time' in nc.variables:
