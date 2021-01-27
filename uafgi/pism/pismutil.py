@@ -20,6 +20,7 @@ def fix_output(output_file3, exception, time_units_s, output_file4):
     """
 
     # Convert to NetCDF
+    print('Compressing PISM output to NetCDF4...')
     cmd = ['ncks', '-4', '-L', '1', '-O', output_file3, output_file4]
     subprocess.run(cmd, check=True)
     #os.remove(output_file3)
