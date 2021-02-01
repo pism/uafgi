@@ -22,7 +22,6 @@ if os.path.exists(ofname):
 
     # Compare to what we had
     if file0 == file1:
-        print('Files the same, no change')
         sys.exit(0)
 
 
