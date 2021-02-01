@@ -1,6 +1,7 @@
-import os
+import os,dill,stat
 import itertools
 from uafgi import ioutil,gicollections
+import subprocess
 
 # ---------------------------------------------------
 
@@ -25,6 +26,7 @@ class Rule(gicollections.MutableNamedTuple):
 class Makefile(object):
 
     def __init__(self):
+        self.rule_list = list()    # Straight list of all rules [rule, ...]
         self.rules = dict()    # {target : rule}
 
 #    def add(self, action, inputs, outputs):
@@ -36,6 +38,7 @@ class Makefile(object):
 #        return rule
 
     def add(self, rule):
+        self.rule_list.append(rule)    # Straight list of all rules
         for output in rule.outputs:
             self.rules[output] = rule
         return rule.outputs
@@ -58,6 +61,63 @@ class Makefile(object):
                 out.append('  O {}'.format(file))
 
         return '\n'.join(out)
+
+    def generate(self, targets, odir, tdir_fn=ioutil.TmpDir, slurm=False):
+        """Renders the Makefile object as a standard Unix Makefile, along with
+        the thunks needed to run it.
+
+        odir:
+            Directory in which to generate the file.
+            Produces odir/Makefile, plus a bunch of other stuff
+        """
+
+        os.makedirs(odir, exist_ok=True)
+
+        cmd = ['sh', '-c', 'export', '-p']
+        env_sh = os.path.join(odir, 'env.sh')
+        Makefile = os.path.join(odir, 'Makefile')
+        domake = os.path.join(odir, 'domake')
+
+        # Extra step if Makefile is to run from within SLURM
+        pythone = 'srun pythone' if slurm else 'pythone'
+
+        with open(domake, 'w') as out:
+            out.write('''#!/bin/sh -f
+#
+
+cd {}
+. {}
+make -f {} "$@"'''.format(os.getcwd(), env_sh, Makefile))
+
+        # chmod a+x
+#        os.chmod(domake, os.stat(domake).st_mode | stat.S_IEXEC)
+        mode = os.stat(domake).st_mode
+        mode |= (mode & 0o444) >> 2    # Copy R bits to X
+        os.chmod(domake, mode)
+
+
+        with open(env_sh, 'w') as out:
+            subprocess.run(cmd, stdout=out)
+
+        with open(Makefile, 'w') as mout:
+            mout.write('all : {}\n\n'.format(' '.join(targets)))
+
+            odir = os.path.realpath(odir)
+            ithunk = 0
+            for rule in self.rule_list:
+                thunk_fname = os.path.join(odir, 'thunk_{:04d}.pik'.format(ithunk))
+
+                # Write the rule in the Makefile
+                mout.write('{} : {}\n'.format(' '.join(rule.outputs), ' '.join(rule.inputs)))
+                mout.write("\t. {}; {} -c 'import uafgi.exe.runrule' {}\n\n".format(env_sh, pythone, thunk_fname))
+
+                # Write the corresponding thunk
+                with open(thunk_fname, 'wb') as out:
+                    dill.dump(tdir_fn, out)
+                    dill.dump(rule, out)
+
+
+                ithunk += 1
 
 class build(object):
     def __init__(self, makefile, targets, tdir_fn=ioutil.TmpDir):
