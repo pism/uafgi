@@ -1,4 +1,5 @@
 from osgeo import ogr,osr
+import shapely
 
 def reproject(src_ds, dst_srs, dst_ds):
     """Reprojects an entire OGR dataset.
@@ -19,7 +20,6 @@ def reproject(src_ds, dst_srs, dst_ds):
 
     src_lyr = src_ds.GetLayer()   # Put layer number or name in her
     src_srs = src_lyr.GetSpatialRef()
-    print('xxxxxxxxxxx ',type(src_srs), type(dst_srs))
     coordTrans = osr.CoordinateTransformation(src_srs, dst_srs)
 
     dst_lyr = dst_ds.CreateLayer(src_lyr.GetName(), srs=dst_srs)
@@ -50,3 +50,35 @@ def reproject(src_ds, dst_srs, dst_ds):
         dst_feature = None
 
     return dst_ds
+
+def to_shapely_polygon(feature, osr_transform):
+    """Converts an OGR polygon (loaded as a feature) to a Shapely polygon.
+
+    feature:
+        An OGR feature.  Eg:
+
+        driver = ogr.GetDriverByName('ESRI Shapefile')
+        src_ds = driver.Open('troughs/shp/fjord_outlines.shp')
+        src_lyr = src_ds.GetLayer()   # Put layer number or name in her
+        while True:
+            feat = src_lyr.GetNextFeature()
+            if feat is None:
+                break
+
+    osr_transform:
+        OSR-style transformer between two coordinate systems.  Eg:
+            src_srs = src_lyr.GetSpatialRef()
+            dst_srs.ImportFromWkt(the_wkt)
+            osr_transform = osr.CoordinateTransformation(src_srs, dst_srs)
+    """
+    geom = feature.GetGeometryRef()
+    geom.Transform(osr_transform)
+    ring = geom.GetGeometryRef(0)
+    npoints = ring.GetPointCount()
+    points = list()
+    for p in range(0,npoints):
+        x,y,z = ring.GetPoint(p)
+        points.append(shapely.geometry.Point(x,y))
+
+    poly = shapely.geometry.Polygon(points)
+    return poly
