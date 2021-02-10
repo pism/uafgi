@@ -62,6 +62,7 @@ class FileInfo(object):
                 if 'polar_stereographic' in nc.variables:
                     ncv = nc.variables['polar_stereographic']
                     self.srs = osr.SpatialReference(wkt=ncv.spatial_ref)
+                    # Use srs.ExportToWkt() to get back to Wkt string
 
                     if hasattr(ncv, 'GeoTransform'):
                         sgeotransform = ncv.GeoTransform
