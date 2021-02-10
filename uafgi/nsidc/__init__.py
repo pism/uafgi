@@ -11,8 +11,44 @@ from uafgi import iopfile,ioutil,ncutil
 """Parsers and formatters for NSIDC file sets"""
 
 
+def extract_grid(in_tif, grid, out_nc, tdir):
+    """Given a .tif downloaded file, extracts the grid from it as a NetCDF
+    file.
+
+    in_tif:
+        .tif file to extract
+    grid:
+        Name of grid (implied from in_tif's filename)
+    out_nc:
+        .nc file to write to
+    tdir:
+        Temporary directory service
+    """
+
+    tmp_file = tdir.filename(suffix='.nc')
+
+    print("Extract grid of {} to {}".format(in_tif, out_nc))
+    # use gdal's python binging to convert GeoTiff to netCDF
+    # advantage of GDAL: it gets the projection information right
+    # disadvantage: the variable is named "Band1", lacks metadata
+    ds = gdal.Open(in_tif)
+    options = gdal.TranslateOptions(gdal.ParseCommandLine(
+        "-co COMPRESS=DEFLATE"))
+    ds = gdal.Translate(tmp_file, ds, options=options)
+    ds = None
+
+    # Copy out the netCDF file, but without Band1 var
+    with netCDF4.Dataset(tmp_file) as nc:
+        with netCDF4.Dataset(out_nc, 'w') as ncout:
+            cnc = ncutil.copy_nc(nc,ncout)
+            cnc.define_vars(['x','y','polar_stereographic'], zlib=True)
+            ncout.grid = grid
+            cnc.copy_data()
+
+
+
 # -------------------------------------------------------------
-class extract_grid(object):
+class x_extract_grid(object):
     """Chooses a single TIFF file and creates a single file just
     describing the grid."""
 
