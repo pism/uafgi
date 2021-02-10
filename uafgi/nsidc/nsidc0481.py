@@ -1,5 +1,7 @@
 import re,os,datetime,itertools
-from uafgi import giutil,iopfile
+from uafgi import giutil,iopfile,gdalutil
+import shapely
+import pandas as pd
 
 # Specifics of the data/ directory
 
@@ -104,3 +106,35 @@ def parse(path):
         ret['parameter'] = ''    # Don't like None for sorting
 
     return ret
+
+
+def load_grids():
+
+    """Loads all the grids in the NSIDC-0481 dataset, returning a
+    rectangle for each domain.  Rectangle is in projected coordinates;
+    note that all grids use the smae projection.
+    poly:
+        Shapely polygon of the grid bounding box
+    srs:
+        
+    """
+    griddir = os.path.join('data', 'measures', 'grids')
+    gridRE = re.compile(r'([WE]\d\d\.\d\d[NS])_grid\.nc')
+
+    grid_s = list()
+    poly_s = list()
+    wkt_s = list()
+    for leaf in os.listdir(griddir):
+        match = gridRE.match(leaf)
+        if match is None:
+            continue
+
+        # Create a Shapely Polygon for the rectangle bounding box
+        fi = gdalutil.FileInfo(os.path.join(griddir,leaf))
+        grid_s.append(match.group(1))
+        poly_s.append(shapely.geometry.Polygon([(fi.x0,fi.y0), (fi.x1,fi.y0), (fi.x1,fi.y1), (fi.x0,fi.y1)]))
+        wkt_s.append(fi.srs.ExportToWkt())
+
+    grids_df = pd.DataFrame({'grid': grid_s, 'poly': poly_s, 'wkt' : wkt_s})
+
+    return grids_df
