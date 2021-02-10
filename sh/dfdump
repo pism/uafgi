@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+#
+import sys
+import os
+import pandas as pd
+
+# Determine name of pandas dataframe to inspect
+dfname = sys.argv[1]
+
+df = pd.read_pickle(dfname)
+print(df.columns)
+print(df)
