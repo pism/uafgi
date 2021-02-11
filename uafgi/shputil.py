@@ -3,6 +3,7 @@ import numpy as np
 import pyproj
 import subprocess
 import pathlib
+import pandas as pd
 
 from osgeo import ogr,gdal
 import shapefile
@@ -48,38 +49,90 @@ def write_shapefile(shapely_obj, fname):
 
 
 
-class ShapefileReader(object):
-    """Shapefile reader, augmented to convert to desired projection."""
+def _xPOLYGON(shape,transform_fn):
+    gline_xx,gline_yy = transform_fn(
+        np.array([xy[0] for xy in shape.points]),
+        np.array([xy[1] for xy in shape.points]))
+    return None,shapely.geometry.Polygon(zip(gline_xx, gline_yy))
 
-    def __init__(self, fname, crs1):
-        self.fname = fname
-        self.crs1 = crs1    # Projection to translate to
+def _xPOINT(shape,transform_fn):
+    pt = shape.points[0]
+    xx,yy = transform_fn(pt[0], pt[1])
+    return shapely.geometry.Point(pt[0],pt[1]), shapely.geometry.Point(xx,yy)
 
-    def __enter__(self):
-        self.reader = shapefile.Reader(self.fname)
 
-        # Get CRS out of shapefile
-        with open(self.fname[:-4] + '.prj') as fin:
-            self.crs0 = pyproj.CRS.from_string(next(fin))
+shapely_converters = {
+    shapefile.POLYGON : _xPOLYGON,
+    shapefile.POINT : _xPOINT,
+    }
 
-        # Converts from self.crs0 to self.crs1
-        # See for always_xy: https://proj.org/faq.html#why-is-the-axis-ordering-in-proj-not-consistent
-        self.proj = pyproj.Transformer.from_crs(self.crs0, self.crs1, always_xy=True)
-        return self
+def read(fname, wkt1):
+    # Convert WKT to CRS
+    crs1 = pyproj.CRS.from_string(wkt1)
 
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        self.reader.__exit__(exc_type, exc_value, exc_traceback)
+    # Get CRS out of shapefile
+    with open(fname[:-4] + '.prj') as fin:
+        crs0 = pyproj.CRS.from_string(next(fin))
 
-    def polygon(self, ix):
-        """Read a shape, reproject and convert to Polygon"""
-        shape = self.reader.shape(ix)
-        if shape.shapeType != shapefile.POLYGON:
-            raise ValueError('shapefile.POLYGON shapeType expected in file {}'.format(self.fname))
+    # Converts from crs0 to crs1
+    # See for always_xy: https://proj.org/faq.html#why-is-the-axis-ordering-in-proj-not-consistent
+    proj = pyproj.Transformer.from_crs(crs0, crs1, always_xy=True)
 
-        gline_xx,gline_yy = self.proj.transform(
-            np.array([xy[0] for xy in shape.points]),
-            np.array([xy[1] for xy in shape.points]))
-        return shapely.geometry.Polygon(zip(gline_xx, gline_yy))
+    with shapefile.Reader(fname) as reader:
+        #fields = reader.fields
+        for i in range(0, len(reader)):
+            rec = reader.record(i).as_dict()
+            shape_raw = reader.shape(i)
+            shape0,shape = shapely_converters[shape_raw.shapeType](shape_raw, proj.transform)
+            rec['_shape0'] = shape0    # Raw coordinates
+            rec['_shape'] = shape
+            yield rec
+
+# ---------------------------------------------------------
+
+#class ShapefileReader(object):
+#    """Shapefile reader, augmented to convert to desired projection."""
+#
+#    def __init__(self, fname, crs1):
+#        self.fname = fname
+#        self.crs1 = crs1    # Projection to translate to
+#
+#    def __enter__(self):
+#        self.reader = shapefile.Reader(self.fname)
+#        self.fields = self.reader.fields
+#
+#        # Get CRS out of shapefile
+#        with open(self.fname[:-4] + '.prj') as fin:
+#            self.crs0 = pyproj.CRS.from_string(next(fin))
+#
+#        # Converts from self.crs0 to self.crs1
+#        # See for always_xy: https://proj.org/faq.html#why-is-the-axis-ordering-in-proj-not-consistent
+#        self.proj = pyproj.Transformer.from_crs(self.crs0, self.crs1, always_xy=True)
+#        return self
+#
+#    def __exit__(self, exc_type, exc_value, exc_traceback):
+#        self.reader.__exit__(exc_type, exc_value, exc_traceback)
+#
+#    def __len__(self):
+#        return len(self.reader)
+#
+#    def shape(self, ix):
+#        """Read a shape, reproject and convert to Polygon"""
+#        shape = self.reader.shape(ix)
+#        if shape.shapeType != shapefile.POLYGON:
+#            raise ValueError('shapefile.POLYGON shapeType expected in file {}'.format(self.fname))
+#
+#        gline_xx,gline_yy = self.proj.transform(
+#            np.array([xy[0] for xy in shape.points]),
+#            np.array([xy[1] for xy in shape.points]))
+#        return shapely.geometry.Polygon(zip(gline_xx, gline_yy))
+#
+#    def records(self):
+#        for i in len(self.reader):
+#            rec = sf.record(i).as_dict()
+#            poly = self.polygon(i)
+#            yield rec,poly
+
 
 
 class ShapefileWriter(object):
