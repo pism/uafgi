@@ -52,8 +52,12 @@ def points_col(lon_col, lat_col, transform_wgs84):
 
 class ExtDf:
     """A dataframe with a unit dict attached"""
+
+    def __repr__(self):
+        return 'ExtDf({})'.format(self.prefix)
+
     #__slots__ = ('df', 'units', 'namecols')
-    def __init__(self, df0, map_wkt, add_prefix=None, units=dict(), lonlat=None, namecols=None, drop_namecols=True):
+    def __init__(self, df0, map_wkt, add_prefix=None, units=dict(), lonlat=None, namecols=None, drop_cols=True, keycols=None):
 
         # Save basic stuff
         self.units = units
@@ -89,6 +93,8 @@ class ExtDf:
             self.df.columns = [add_prefix + str(x) for x in self.df.columns]
             if namecols is not None:
                 namecols = [self.prefix+x for x in namecols]
+            if keycols is not None:
+                keycols = [self.prefix+x for x in keycols]
             if lonlat is not None:
                 lonlat = [self.prefix+x for x in lonlat]
             self.units = {self.prefix+name:val for name,val in self.units.items()}
@@ -99,16 +105,94 @@ class ExtDf:
             self.df[self.prefix+'loc'] = points_col(self.df[lonlat[0]], self.df[lonlat[1]], transform_wgs84)
             self.units[self.prefix+'loc'] = 'm'    # TODO: Fish this out of the projection
 
+        # -------------------------------------------------
+        dropme = set()
+
+        # Create a 'key' column
+        if keycols is not None:
+            self.df[self.prefix+'key'] = list(zip(*[self.df[x] for x in keycols]))
+            self.keycols = keycols
+            if drop_cols:
+                dropme.update(self.keycols)
+                #self.df = self.df.drop(self.keycols, axis=1)
+        else:
+            self.keycols = list()
+
+        # Make sure this is a proper unique key
+        dups = self.df[self.prefix+'key'].duplicated(keep=False)
+        dups = dups[dups]
+        if len(dups) > 0:
+            print('============================ Duplicate keys')
+            print(self.df.loc[dups.index])
+
         # Create an 'allnames' column by zipping all columns indicating any kind of name
         if namecols is not None:
             self.df[self.prefix+'allnames'] = list(zip(*[self.df[x] for x in namecols]))
             self.namecols = namecols
-            if drop_namecols:
-                self.df = self.df.drop(self.namecols, axis=1)
+            if drop_cols:
+                dropme.update(self.namecols)
+                #self.df = self.df.drop(self.namecols, axis=1)
         else:
             self.namecols = list()
 
+        self.df = self.df.drop(list(dropme), axis=1)
 
+# ================================================================
+# ================================================================
+# ================================================================
+# ================================================================
+
+CODE FROM NOTEBOOK
+
+# Remove extraneous columns
+matchdf = match.df[['mwb_ix', 'w21_ix', 'mwb_key', 'w21_key']]
+
+over = matchdf.loc[[1,454,1136]][['mwb_key', 'w21_key']]
+
+xf0=w21
+for xf in (w21,mwb):
+    df = xf.df
+    key = xf.prefix+'key'
+
+    #pd.merge(over, df.reset_index(), how='left', on=key)
+    over = pd.merge(over, df[[key]].reset_index(), how='left', on=key).rename(columns={'index':xf.prefix+'ix'})
+
+#over = over.reset_index()
+#print(over)
+print(over[[xf0.prefix+'key']])
+print(matchdf.columns)
+
+# Remove overridden rows (from left) from our match DataFrame
+key = xf0.prefix+'key'
+df = pd.merge(matchdf, over[[key]], how='left', on=key, indicator=True)
+df = df[df['_merge'] != 'both'].drop(['_merge'], axis=1)
+#df = df.reset_index()
+
+# Add in overrides
+df = pd.concat([over,df], ignore_index=True)
+
+# Check for duplicate xf0 keys
+dups0 = df[xf0.prefix+'key'].duplicated(keep=False)
+dups = dups0[dups0]
+
+df.loc[dups.index].sort_values(xf0.prefix+'key')
+#print(df.columns)
+#print(over.columns)
+
+# Remove all dups for testing...
+df = df[~dups0]
+df.sort_values(xf0.prefix+'key')
+matchdf = df
+
+# Do the join!
+# https://stackoverflow.com/questions/11976503/how-to-keep-index-when-using-pandas-merge
+df = pd.merge(w21.df.reset_index(), matchdf, how='left', left_index=True, right_on='w21_ix', suffixes=(None,'_zzz')).set_index('index')
+df = pd.merge(df.reset_index(), mwb.df[['mwb_id2']], how='left', left_on='mwb_ix', right_index=True, suffixes=(None,'_zzz')).set_index('index')
+# TODO: Now remove extra columns: xxx_ix, xxx_zzz
+df
+
+# ================================================================
+# ================================================================
 # ================================================================
 
 # Good article on Greenland place names
@@ -190,7 +274,12 @@ def levenshtein(name0, name1):
 def max_levenshtein(names0, names1):
     """Computes maximum Levenshtein ratio of one name in names0 vs. one name in names1."""
     dir_and_ratio = (False,-1.)
-    for n0,n1 in itertools.product(names0,names1):
+
+#    nm0 = [x for x in names0 if len(x)>0]
+#    nm1 = [x for x in names1 if len(x)>0]
+    for n0,n1 in itertools.product(
+        (x for x in names0 if len(x)>0),
+        (x for x in names1 if len(x)>0)):
         dir_and_ratio = max(dir_and_ratio, levenshtein(n0,n1))
 
         # OPTIMIZATION: If we already found a full match, we're done!
@@ -198,7 +287,7 @@ def max_levenshtein(names0, names1):
             return dir_and_ratio
     return dir_and_ratio
 
-def levenshtein_cols(df0, df1):
+def levenshtein_cols(allnames0, allnames1):
 
     """For each row in a bunch of columns, compute the maximum Levenshtein
     ratio between any column in df0 and any column in df1.  Thus, it is likely
@@ -217,17 +306,15 @@ df0 and df1 are DataFrames, selecting out just the cols we want to join.
     col_ix0 = list()
     col_ix1 = list()
     col_dir = list()
-    col_val = list()
-    for ix0,row0 in df0.iterrows():
-        row0_vals = [val for val in row0.values if len(val) > 0]
-        for ix1,row1 in df1.iterrows():
-            row1_vals = [val for val in row1.values if len(val) > 0]
+    col_lev = list()
+    for ix0,an0 in allnames0.iteritems():
+        for ix1,an1 in allnames1.iteritems():
 
             col_ix0.append(ix0)
             col_ix1.append(ix1)
-            dir,val = max_levenshtein(row0_vals, row1_vals)
+            dir,lev = max_levenshtein(an0, an1)
             col_dir.append(dir)
-            col_val.append(val)
+            col_lev.append(lev)
 
 #            if len(col_ix0) > 10:
 #                break
@@ -238,10 +325,88 @@ df0 and df1 are DataFrames, selecting out just the cols we want to join.
         'ix0' : col_ix0,
         'ix1' : col_ix1,
         'dir' : col_dir,
-        'val' : col_val,
+        'lev' : col_lev,
     })
 
 # ============================================================
+class Match:
+    """Used to do left outer joins"""
+
+    def __init__(self, xfs, cols):
+        self.xfs = xfs    # (ExtDf, ExtDf)
+        self.cols = cols
+
+    def __repr__(self):
+        return 'Match({}, len={})'.format(
+            str(list(zip(self.xfs, self.cols))),
+            len(self.df))
+
+    def left_overrides(self, over0):
+
+        """Adds a bunch of overrides to the join.
+        And then ensures each left_key appears only once.
+
+        over0: DataFrame
+            <df0>_key, <df1>_key
+                Key columns in the two DataFrames
+        """
+
+        over = over0.copy()
+
+        # For each table in our join:
+        # Outer join with original data to lookup index based on key
+        for jj in range(0,len(self.xfs)):
+
+            xf = self.xfs[jj]
+            df = xf.df
+            key = xf.prefix+'key'
+
+            over = pd.merge(
+                over, df[[key]].reset_index(),
+                how='left', on=key).rename(columns={'index':xf.prefix+'ix'})
+
+        # Remove overridden rows
+
+
+
+
+
+
+
+
+
+class MatchAllNames(Match):
+    def __init__(self, xf0, xf1):
+        """
+        xf0, xf1: ExtDf
+        """
+        self.xfs = (xf0,xf1)
+        self.cols = (xf0.prefix+'allnames', xf1.prefix+'allnames')
+
+        lcols = levenshtein_cols(
+            xf0.df[xf0.prefix+'allnames'],
+            xf1.df[xf1.prefix+'allnames']) \
+            .rename(columns={'ix0':xf0.prefix+'ix', 'ix1':xf1.prefix+'ix'})
+
+        # Only keep exact matches.  Problem is... inexact matches are fooled by
+        # "XGlacier N", "XGlacier E", etc.
+        lcols = lcols[lcols['lev']==1.0]
+
+        dfx0 = xf0.df.loc[lcols[xf0.prefix+'ix']]
+        dfx0.index = lcols.index
+
+        dfx1 = xf1.df.loc[lcols[xf1.prefix+'ix']]
+        dfx1.index = lcols.index
+
+        xcols = lcols.copy()
+        xcols[xf0.prefix+'key'] = dfx0[xf0.prefix+'key']
+        xcols[xf1.prefix+'key'] = dfx1[xf1.prefix+'key']
+        xcols[xf0.prefix+'allnames'] = dfx0[xf0.prefix+'allnames']
+        xcols[xf1.prefix+'allnames'] = dfx1[xf1.prefix+'allnames']
+
+        self.df = xcols
+
+
 # ============================================================
 # Readers fro specific datasets
 
@@ -265,6 +430,7 @@ def read_bkm15(map_wkt):
 
     return ExtDf(df, map_wkt,
         add_prefix='bkm15_',
+        keycols=['id'],
         lonlat=('lon','lat'),
         namecols=['official_name', 'new_greenl_name', 'old_greenl_name', 'foreign_name', 'alt'])
 
@@ -283,7 +449,13 @@ def read_m17(map_wkt):
     df = pd.read_csv('data/morlighem2017/TableS1.csv', skiprows=3,
         usecols=list(range(len(colnames))), names=colnames) \
         .drop('id', axis=1)
-    return ExtDf(df, map_wkt, add_prefix='m17_', units=units, lonlat=('lon','lat'), namecols=['name'])
+    return ExtDf(df, map_wkt,
+        add_prefix='m17_',
+        units=units,
+        keycols=['name','lon','lat'],
+        lonlat=('lon','lat'),
+        namecols=['name'],
+        drop_cols=False)
 
     #m17['m17_loc'] = points_col(m17['m17_lon'], m17['m17_lat'], proj_wgs84)
     #m17_units['m17_loc'] = 'm'
@@ -411,7 +583,9 @@ def read_w21(map_wkt):
 
 
     return ExtDf(df, map_wkt, add_prefix='w21_', units=col_units,
-        namecols=['popular_name', 'greenlandic_name'])
+        keycols=['popular_name', 'flux_basin_mouginot_2019'],
+        namecols=['popular_name', 'greenlandic_name'],
+        drop_cols=False)
 
 def read_mwb(map_wkt):
 
@@ -428,4 +602,5 @@ def read_mwb(map_wkt):
 
     return ExtDf(df, map_wkt, add_prefix='mwb_',
         units={'basin_poly': 'm'},
+        keycols=['name_ac'],
         namecols=['name_ac', 'name'])
