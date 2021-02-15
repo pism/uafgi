@@ -60,13 +60,21 @@ def _xPOINT(shape,transform_fn):
     xx,yy = transform_fn(pt[0], pt[1])
     return shapely.geometry.Point(pt[0],pt[1]), shapely.geometry.Point(xx,yy)
 
+def _xPOLYLINE(shape,transform_fn):
+    gline_xx,gline_yy = transform_fn(
+        np.array([xy[0] for xy in shape.points]),
+        np.array([xy[1] for xy in shape.points]))
+    return None,shapely.geometry.LineString(zip(gline_xx, gline_yy))
 
 shapely_converters = {
     shapefile.POLYGON : _xPOLYGON,
+    shapefile.POLYLINE : _xPOLYLINE,
     shapefile.POINT : _xPOINT,
     }
 
-def read(fname, wkt1):
+def get_transformer(fname, wkt1):
+    """Creates a transformer from native projetion to wkt1"""
+
     # Convert WKT to CRS
     crs1 = pyproj.CRS.from_string(wkt1)
 
@@ -76,18 +84,58 @@ def read(fname, wkt1):
 
     # Converts from crs0 to crs1
     # See for always_xy: https://proj.org/faq.html#why-is-the-axis-ordering-in-proj-not-consistent
-    proj = pyproj.Transformer.from_crs(crs0, crs1, always_xy=True)
+    return pyproj.Transformer.from_crs(crs0, crs1, always_xy=True)
+
+def read(fname, wkt1, read_shape=True):
+    """read_shapes:
+        Should the shape actually be read?  (Or just the attributes)?
+    """
+
+    if read_shape:
+        proj = get_transformer(fname, wkt1)
 
     with shapefile.Reader(fname) as reader:
         #fields = reader.fields
         for i in range(0, len(reader)):
             rec = reader.record(i).as_dict()
-            shape_raw = reader.shape(i)
-            shape0,shape = shapely_converters[shape_raw.shapeType](shape_raw, proj.transform)
-            rec['_shape0'] = shape0    # Raw coordinates
-            rec['_shape'] = shape
+
+            if read_shape:
+                shape_raw = reader.shape(i)
+                shape0,shape = shapely_converters[shape_raw.shapeType](shape_raw, proj.transform)
+                rec['_shape0'] = shape0    # Raw coordinates
+                rec['_shape'] = shape
             yield rec
 
+
+# ---------------------------------------------------------
+# Here's an example of reading a shapefile using ogr
+# def read_fjords(dest_crs_wkt):
+#     """
+#     dest_crs_wkt:
+#         WKT of the desination coordinate system.
+#     """
+# 
+#     driver = ogr.GetDriverByName('ESRI Shapefile')
+#     src_ds = driver.Open('troughs/shp/fjord_outlines.shp')
+#     src_lyr = src_ds.GetLayer()   # Put layer number or name in her
+#     src_srs = src_lyr.GetSpatialRef()
+#     dst_srs = osr.SpatialReference()
+#     dst_srs.ImportFromWkt(dest_crs_wkt)
+#     transform = osr.CoordinateTransformation(src_srs, dst_srs)
+# 
+#     fjords_s = list()
+#     if True:
+#         while True:
+#             feat = src_lyr.GetNextFeature()
+#             if feat is None:
+#                 break
+#             poly = ogrutil.to_shapely_polygon(feat,transform)
+# 
+#             fjords_s.append(poly)
+# 
+#     return fjords_s
+##    fjords = pd.Series(name='fjords',data=fjords_s)
+##    return fjords
 # ---------------------------------------------------------
 
 #class ShapefileReader(object):
