@@ -6,7 +6,7 @@ import Levenshtein
 import shapely
 import pyproj
 import os
-from uafgi import ioutil,shputil
+from uafgi import ioutil,shputil,gicollections
 import csv
 import numpy as np
 
@@ -57,7 +57,7 @@ class ExtDf:
         return 'ExtDf({})'.format(self.prefix)
 
     #__slots__ = ('df', 'units', 'namecols')
-    def __init__(self, df0, map_wkt, add_prefix=None, units=dict(), lonlat=None, namecols=None, drop_cols=True, keycols=None):
+    def __init__(self, df0, map_wkt, add_prefix=None, units=dict(), lonlat=None, namecols=None, keycols=None):
 
         # Save basic stuff
         self.units = units
@@ -112,8 +112,8 @@ class ExtDf:
         if keycols is not None:
             self.df[self.prefix+'key'] = list(zip(*[self.df[x] for x in keycols]))
             self.keycols = keycols
-            if drop_cols:
-                dropme.update(self.keycols)
+#            if drop_cols:
+#                dropme.update(self.keycols)
                 #self.df = self.df.drop(self.keycols, axis=1)
         else:
             self.keycols = list()
@@ -129,8 +129,8 @@ class ExtDf:
         if namecols is not None:
             self.df[self.prefix+'allnames'] = list(zip(*[self.df[x] for x in namecols]))
             self.namecols = namecols
-            if drop_cols:
-                dropme.update(self.namecols)
+#            if drop_cols:
+#                dropme.update(self.namecols)
                 #self.df = self.df.drop(self.namecols, axis=1)
         else:
             self.namecols = list()
@@ -141,55 +141,6 @@ class ExtDf:
 # ================================================================
 # ================================================================
 # ================================================================
-
-CODE FROM NOTEBOOK
-
-# Remove extraneous columns
-matchdf = match.df[['mwb_ix', 'w21_ix', 'mwb_key', 'w21_key']]
-
-over = matchdf.loc[[1,454,1136]][['mwb_key', 'w21_key']]
-
-xf0=w21
-for xf in (w21,mwb):
-    df = xf.df
-    key = xf.prefix+'key'
-
-    #pd.merge(over, df.reset_index(), how='left', on=key)
-    over = pd.merge(over, df[[key]].reset_index(), how='left', on=key).rename(columns={'index':xf.prefix+'ix'})
-
-#over = over.reset_index()
-#print(over)
-print(over[[xf0.prefix+'key']])
-print(matchdf.columns)
-
-# Remove overridden rows (from left) from our match DataFrame
-key = xf0.prefix+'key'
-df = pd.merge(matchdf, over[[key]], how='left', on=key, indicator=True)
-df = df[df['_merge'] != 'both'].drop(['_merge'], axis=1)
-#df = df.reset_index()
-
-# Add in overrides
-df = pd.concat([over,df], ignore_index=True)
-
-# Check for duplicate xf0 keys
-dups0 = df[xf0.prefix+'key'].duplicated(keep=False)
-dups = dups0[dups0]
-
-df.loc[dups.index].sort_values(xf0.prefix+'key')
-#print(df.columns)
-#print(over.columns)
-
-# Remove all dups for testing...
-df = df[~dups0]
-df.sort_values(xf0.prefix+'key')
-matchdf = df
-
-# Do the join!
-# https://stackoverflow.com/questions/11976503/how-to-keep-index-when-using-pandas-merge
-df = pd.merge(w21.df.reset_index(), matchdf, how='left', left_index=True, right_on='w21_ix', suffixes=(None,'_zzz')).set_index('index')
-df = pd.merge(df.reset_index(), mwb.df[['mwb_id2']], how='left', left_on='mwb_ix', right_index=True, suffixes=(None,'_zzz')).set_index('index')
-# TODO: Now remove extra columns: xxx_ix, xxx_zzz
-df
 
 # ================================================================
 # ================================================================
@@ -329,82 +280,212 @@ df0 and df1 are DataFrames, selecting out just the cols we want to join.
     })
 
 # ============================================================
-class Match:
-    """Used to do left outer joins"""
-
-    def __init__(self, xfs, cols):
-        self.xfs = xfs    # (ExtDf, ExtDf)
-        self.cols = cols
+class Match(gicollections.MutableNamedTuple):
+    __slots__ = (
+        'xfs',     # (left, right): ExtDfs being joined
+        'cols',    # Columns being joined in left and right
+        'df')      # The match dataframe
 
     def __repr__(self):
         return 'Match({}, len={})'.format(
             str(list(zip(self.xfs, self.cols))),
             len(self.df))
 
-    def left_overrides(self, over0):
+    def left_join(self, overrides=None, ignore_dups=False, right_cols=None):
 
-        """Adds a bunch of overrides to the join.
-        And then ensures each left_key appears only once.
+        """Given a raw Match, returns a DataFrame that can be used for a left
+        outer join.  It will have (assuming ExtDfs named 
+          1. No more than copy of each row of the left ExtDf
+          2. Columns: [<left>_ix, <left>_key, <right>_ix, <right>_key]
 
-        over0: DataFrame
-            <df0>_key, <df1>_key
-                Key columns in the two DataFrames
+        Raises a ValueError if the (1) cannot be satisfied.
+
+        match: Match
+            Raw result of a match
+        overrides: DataFrame
+            Manual overrides for the join.
+            Contains columns: [<left>_key, <right>_key]
+        ignore_dups:
+            Remove any duplicate rows (on the left key) from the join.
+            Otherwise, raise a ValueError on any duplicate rows.
+        right_cols: [str, ...]
+            Names of columns from right DataFrame to keep.
+            If None, keep all columns.
         """
 
-        over = over0.copy()
+        # Column names / shortcuts
+        left = self.xfs[0]
+        left_ix = left.prefix + 'ix'
+        left_key = left.prefix + 'key'
+        right = self.xfs[1]
+        right_ix = right.prefix + 'ix'
+        right_key = right.prefix + 'key'
 
-        # For each table in our join:
-        # Outer join with original data to lookup index based on key
-        for jj in range(0,len(self.xfs)):
+        # Make dummy overrides
+        if overrides is None:
+            overrides = pd.DataFrame(columns=[left_ix, left_key, right_ix, right_key])
 
-            xf = self.xfs[jj]
+        # Add index columns to overrides (for convenient joining w/ other tables)
+        for xf in self.xfs:
+            print('xf={}'.format(xf))
             df = xf.df
             key = xf.prefix+'key'
 
-            over = pd.merge(
-                over, df[[key]].reset_index(),
-                how='left', on=key).rename(columns={'index':xf.prefix+'ix'})
+            print('key ',key)
+            print('over ',overrides.columns)
+            print('df ',df.columns)
 
-        # Remove overridden rows
+            overrides = pd.merge(overrides, df[[key]].reset_index(), how='left', on=key) \
+                .rename(columns={'index':xf.prefix+'ix'})
 
+        # Remove extraneous columns
+        df = self.df[[left_ix, left_key, right_ix, right_key]]
 
+        # Remove overridden rows (from left) from our match DataFrame
+        df = pd.merge(df, overrides[[left_key]], how='left', on=left_key, indicator=True)
+        df = df[df['_merge'] != 'both'].drop(['_merge'], axis=1)
 
+        # Add in (manual) overrides
+        if len(overrides) > 0:
+            df = pd.concat([overrides,df], ignore_index=True)
 
+        # Check for duplicate left keys
+        dups0 = df[left_key].duplicated(keep=False)
+        dups = dups0[dups0]
+        # df.loc[dups.index].sort_values(xf0.prefix+'key')
 
+        # Remove all dups for testing...
+        if ignore_dups:
+            df = df[~dups0]
+            #df.sort_values(xf0.prefix+'key')
+        else:
+            #print(self.df.columns)
+            print(self.df.index)
+            print(dups.index)
 
+            ddf = pd.merge(self.df, df[[left_key]].loc[dups.index], how='inner', left_index=True, right_index=True, suffixes=(None,'_DELETEME'))
+            drops = {x for x in ddf.columns if x.endswith('_DELETEME')}
+            ddf = ddf.drop(list(drops), axis=1)
+            ddf = ddf.sort_values([left_key, right_key])
 
+            print(len(dups), len(ddf))
+            if len(dups) > 0:
+                raise ValueError('\n'.join([
+                    'Duplicate right values found in left outer join.',
+                    ddf.to_string()]))
+        matchdf = df
 
+        # -------------------------------------------
+        # Do the join!
+        # https://stackoverflow.com/questions/11976503/how-to-keep-index-when-using-pandas-merge
 
-class MatchAllNames(Match):
-    def __init__(self, xf0, xf1):
-        """
-        xf0, xf1: ExtDf
-        """
-        self.xfs = (xf0,xf1)
-        self.cols = (xf0.prefix+'allnames', xf1.prefix+'allnames')
+        # Join left -- matchdf
+        df = pd.merge(
+            left.df.reset_index(), matchdf, how='left',
+            left_index=True, right_on=left_ix,
+            suffixes=(None,'_DELETEME')).set_index('index')
 
-        lcols = levenshtein_cols(
-            xf0.df[xf0.prefix+'allnames'],
-            xf1.df[xf1.prefix+'allnames']) \
-            .rename(columns={'ix0':xf0.prefix+'ix', 'ix1':xf1.prefix+'ix'})
+        # Join (left -- matchdf) -- right
+        df = pd.merge(df.reset_index(),
+            right.df if right_cols is None else right.df[right_cols],
+            how='left', left_on=right_ix, right_index=True,
+            suffixes=(None,'_DELETEME')).set_index('index')
 
-        # Only keep exact matches.  Problem is... inexact matches are fooled by
-        # "XGlacier N", "XGlacier E", etc.
-        lcols = lcols[lcols['lev']==1.0]
+        # Remove extra columns that accumulated in the join
+        drops = {x for x in df.columns if x.endswith('_DELETEME')}
+        drops.update([left_ix, right_ix])
+        if (right_cols is not None) and (right_key not in right_cols):
+            drops.add(right_key)
+        df = df.drop(drops, axis=1)
+        print(df.columns)
+        return df
 
-        dfx0 = xf0.df.loc[lcols[xf0.prefix+'ix']]
-        dfx0.index = lcols.index
+def match_allnames(xf0, xf1):
 
-        dfx1 = xf1.df.loc[lcols[xf1.prefix+'ix']]
-        dfx1.index = lcols.index
+    """Finds candidate Matches between two DataFrames based on the
+    *allnames* field.
 
-        xcols = lcols.copy()
-        xcols[xf0.prefix+'key'] = dfx0[xf0.prefix+'key']
-        xcols[xf1.prefix+'key'] = dfx1[xf1.prefix+'key']
-        xcols[xf0.prefix+'allnames'] = dfx0[xf0.prefix+'allnames']
-        xcols[xf1.prefix+'allnames'] = dfx1[xf1.prefix+'allnames']
+    xf0, xf1: ExtDf
+    """
 
-        self.df = xcols
+    lcols = levenshtein_cols(
+        xf0.df[xf0.prefix+'allnames'],
+        xf1.df[xf1.prefix+'allnames']) \
+        .rename(columns={'ix0':xf0.prefix+'ix', 'ix1':xf1.prefix+'ix'})
+
+    # Only keep exact matches.  Problem is... inexact matches are fooled by
+    # "XGlacier N", "XGlacier E", etc.
+    lcols = lcols[lcols['lev']==1.0]
+
+    dfx0 = xf0.df.loc[lcols[xf0.prefix+'ix']]
+    dfx0.index = lcols.index
+
+    dfx1 = xf1.df.loc[lcols[xf1.prefix+'ix']]
+    dfx1.index = lcols.index
+
+    xcols = lcols.copy()
+    xcols[xf0.prefix+'key'] = dfx0[xf0.prefix+'key']
+    xcols[xf1.prefix+'key'] = dfx1[xf1.prefix+'key']
+    xcols[xf0.prefix+'allnames'] = dfx0[xf0.prefix+'allnames']
+    xcols[xf1.prefix+'allnames'] = dfx1[xf1.prefix+'allnames']
+
+    return Match((xf0,xf1), (xf0.prefix+'allnames', xf1.prefix+'allnames'), xcols)
+
+def polys_overlapping_points(points_s, polys, poly_outs, poly_label='poly'):
+
+    """Given a list of points and polygons... finds which polygons overlap
+    each point.
+
+    points_s: pd.Series(shapely.geometry.Point)
+        Pandas Series containing the Points (with index)
+    polys: [poly, ...]
+        List of shapely.geometry.Polygon
+    poly_outs: [x, ...]
+        Item to place in resulting DataFrame in place of the Polygon.
+        Could be the same as the polygon.
+
+    """
+
+    # Load the grids 
+    out_s = list()
+    for poly,poly_out in zip(polys,poly_outs):
+
+        # Find intersections between terminus locations and this grid
+        # NOTE: intersects includes selections.index
+        intersects = points_s[points_s.map(lambda p: poly.intersects(p))]
+
+        out_s.append(pd.Series(index=intersects.index, data=[poly_out] * len(intersects),name=poly_label))
+
+    grids = pd.concat(out_s, axis=0)
+    return grids
+
+def match_point_poly(left, left_point, right, right_poly, left_cols=None, right_cols=None):
+    """Creates a Match object, looking for points in <left> contained in polygon in <right>
+    left, right: ExtDf
+        Datasets to match
+    left_point: str
+        Column in left to join.  Must be of type POINT
+    right_poly: str
+        Column in right to join.  Must be of type POLYGON
+    left_cols, right_cols:
+        Additional columns from left and right to include in the match dataframe
+    """
+
+    keyseries = polys_overlapping_points(left.df[left_point], right.df[right_poly], right.df.index)#mwb.df['mwb_key'])
+    keyseries.name = right.prefix+'ix'
+    matchdf = keyseries.reset_index().rename(columns={'index':left.prefix+'ix'})
+    # Add in extra cols
+    for xcols,xf in zip((left_cols,right_cols), (left,right)):
+        key = xf.prefix+'key'
+        if xcols is None:
+            xcols = [key]
+        elif key not in xcols:
+            xcols = [key] + xcols
+
+        matchdf = pd.merge(matchdf, xf.df[xcols],
+            how='left', left_on=xf.prefix+'ix', right_index=True)
+
+    return Match((left,right), (left_point, right_poly), matchdf)
 
 
 # ============================================================
@@ -449,17 +530,14 @@ def read_m17(map_wkt):
     df = pd.read_csv('data/morlighem2017/TableS1.csv', skiprows=3,
         usecols=list(range(len(colnames))), names=colnames) \
         .drop('id', axis=1)
+    df = df[df.name != 'TOTAL']
+
     return ExtDf(df, map_wkt,
         add_prefix='m17_',
         units=units,
         keycols=['name','lon','lat'],
         lonlat=('lon','lat'),
-        namecols=['name'],
-        drop_cols=False)
-
-    #m17['m17_loc'] = points_col(m17['m17_lon'], m17['m17_lat'], proj_wgs84)
-    #m17_units['m17_loc'] = 'm'
-    #m17_namecols = 'm17_name'
+        namecols=['name'])
 
 def read_w21(map_wkt):
     # w21: Reads the dataset:
@@ -584,8 +662,7 @@ def read_w21(map_wkt):
 
     return ExtDf(df, map_wkt, add_prefix='w21_', units=col_units,
         keycols=['popular_name', 'flux_basin_mouginot_2019'],
-        namecols=['popular_name', 'greenlandic_name'],
-        drop_cols=False)
+        namecols=['popular_name', 'greenlandic_name'])
 
 def read_mwb(map_wkt):
 
@@ -600,7 +677,18 @@ def read_mwb(map_wkt):
         'id':'id', 'id2':'id2', 'UGID':'ugid', 'Name':'name', '_shape':'basin_poly'})
 #    print(df.columns)
 
+    # Remove the "ICE_CAPS_NW" polygon
+    df = df[df['name_ac'] != 'ICE_CAPS_NW']
+
     return ExtDf(df, map_wkt, add_prefix='mwb_',
         units={'basin_poly': 'm'},
         keycols=['name_ac'],
         namecols=['name_ac', 'name'])
+
+# =====================================================================
+
+# Standard Greenland Stereographic Projection
+map_wkt = "PROJCS[\"WGS 84 / NSIDC Sea Ice Polar Stereographic North\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Polar_Stereographic\"],PARAMETER[\"latitude_of_origin\",70],PARAMETER[\"central_meridian\",-45],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",SOUTH],AXIS[\"Northing\",SOUTH],AUTHORITY[\"EPSG\",\"3413\"]]"
+
+    
+
