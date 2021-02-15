@@ -6,7 +6,7 @@ import Levenshtein
 import shapely
 import pyproj
 import os
-from uafgi import ioutil,shputil,gicollections
+from uafgi import ioutil,shputil,gicollections,functional
 import csv
 import numpy as np
 
@@ -85,6 +85,7 @@ class ExtDf:
         
         # Figure out prefix stuff
         if add_prefix is None:
+            # Infer common prefix in column names, if any
             self.prefix = commonprefix(list(df))
         else:
             self.prefix = add_prefix
@@ -491,6 +492,7 @@ def match_point_poly(left, left_point, right, right_poly, left_cols=None, right_
 # ============================================================
 # Readers fro specific datasets
 
+@functional.memoize
 def read_bkm15(map_wkt):
     ##### Brief communication: Getting Greenland’s glaciers right – a new data set of all official Greenlandic glacier names
     # Bjørk, Kruse, Michaelsen, 2015 [BKM15]
@@ -516,6 +518,7 @@ def read_bkm15(map_wkt):
         namecols=['official_name', 'new_greenl_name', 'old_greenl_name', 'foreign_name', 'alt'])
 
 
+@functional.memoize
 def read_m17(map_wkt):
     # Morlighem et al, 2017
     # BedMachine v3 paper
@@ -539,6 +542,7 @@ def read_m17(map_wkt):
         lonlat=('lon','lat'),
         namecols=['name'])
 
+@functional.memoize
 def read_w21(map_wkt):
     # w21: Reads the dataset:
     # data/GreenlandGlacierStats/
@@ -610,9 +614,6 @@ def read_w21(map_wkt):
 
         # Split up file
         columns = ['{} {}'.format(a,b).replace(':','').strip() for a,b in zip(rows[0], rows[1])]
-#        for x in columns:
-#            print("'{}'".format(x))
-#        units = rows[1]
         data = rows[2:]
 
         # Create dataframe
@@ -664,6 +665,7 @@ def read_w21(map_wkt):
         keycols=['popular_name', 'flux_basin_mouginot_2019'],
         namecols=['popular_name', 'greenlandic_name'])
 
+@functional.memoize
 def read_mwb(map_wkt):
 
     # mwb: Greenland Basins
@@ -685,10 +687,77 @@ def read_mwb(map_wkt):
         keycols=['name_ac'],
         namecols=['name_ac', 'name'])
 
+
+
+@functional.memoize
+def read_fj(map_wkt):
+    # Reads Elizabeth's hand-drawn fjord outlines
+    # They are constructed to each contain the point from w21
+    # No labels.  Join an existing table, with locations obtained from bkm21,
+    # to add fjord outlines to it.
+    df = pd.DataFrame(shputil.read('troughs/shp/fjord_outlines.shp', map_wkt)) \
+        .drop(['_shape0', 'id'], axis=1) \
+        .rename(columns={'_shape':'poly'})
+    df = df.reset_index().rename(columns={'index':'serial'})    # Add a key column
+
+    return ExtDf(df, map_wkt, add_prefix='fj_',
+        units={'fjord_poly': 'm'},
+        keycols=['serial'])
+
+@functional.memoize
+def read_cf20(map_wkt):
+
+    # Convert WKT to CRS
+    wgs84 = pyproj.CRS.from_epsg("4326")
+    crs1 = pyproj.CRS.from_string(map_wkt)
+    transform = pyproj.Transformer.from_crs(wgs84, crs1, always_xy=True)
+
+    # Reads the CALFIN stuff
+    rows = list()
+    ddir = 'data/calfin/domain-termini'
+    calfinRE = re.compile(r'(.*)_(.*)_(.*)_v(.*).shp')
+    for leaf in os.listdir(ddir):
+        match = calfinRE.match(leaf)
+        if match is None:
+            continue
+        fname = os.path.join(ddir,leaf)
+
+        df = pd.DataFrame(shputil.read(fname, map_wkt, read_shape=False))
+
+        # All the rows are the same, except different terminus line / position / etc
+        row = df.loc[0].to_dict()
+        row['fname'] = fname
+
+        # Discard columns that aren't constant through the entire shapefile
+        for col in ('Center_X', 'Center_Y', 'Latitude', 'Longitude', 'QualFlag', 'Satellite', 'Date', 'ImageID', 'Author'):
+            del row[col]
+
+        # Take the center point of each calving front, combine to a MultiPoint object
+        loc = points_col(df['Longitude'], df['Latitude'], transform)
+        mp = shapely.geometry.MultiPoint(points=loc.to_list())
+        row['locs'] = mp
+
+        # Add this as a row for our final dataframe
+        rows.append(row)
+
+    df = pd.DataFrame(rows) \
+        .rename(columns={'GlacierID':'glacier_id', 'GrnlndcN':'greenlandic_name', 'OfficialN':'official_name', 'AltName':'alt_name', 'RefName':'ref_name'})
+
+
+    return ExtDf(df, map_wkt, add_prefix='cf20_',
+        units={'basin_poly': 'm'},
+        keycols=['glacier_id'],
+        namecols=['greenlandic_name', 'official_name', 'alt_name', 'ref_name'])
+
+
+
+
+
+
 # =====================================================================
 
 # Standard Greenland Stereographic Projection
-map_wkt = "PROJCS[\"WGS 84 / NSIDC Sea Ice Polar Stereographic North\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Polar_Stereographic\"],PARAMETER[\"latitude_of_origin\",70],PARAMETER[\"central_meridian\",-45],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",SOUTH],AXIS[\"Northing\",SOUTH],AUTHORITY[\"EPSG\",\"3413\"]]"
+#map_wkt = "PROJCS[\"WGS 84 / NSIDC Sea Ice Polar Stereographic North\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Polar_Stereographic\"],PARAMETER[\"latitude_of_origin\",70],PARAMETER[\"central_meridian\",-45],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",SOUTH],AXIS[\"Northing\",SOUTH],AUTHORITY[\"EPSG\",\"3413\"]]"
 
     
 
