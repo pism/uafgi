@@ -50,93 +50,103 @@ def points_col(lon_col, lat_col, transform_wgs84):
             *transform_wgs84.transform(lon_col.tolist(), lat_col.tolist()))]
         )
 
-class ExtDf:
+
+class ExtDf(gicollections.MutableNamedTuple):
     """A dataframe with a unit dict attached"""
+    __slots__ = (
+        'prefix',
+        'df',
+        'units',
+        'keycols',
+        'map_wkt')
 
     def __repr__(self):
         return 'ExtDf({})'.format(self.prefix)
 
-    #__slots__ = ('df', 'units', 'namecols')
-    def __init__(self, df0, map_wkt, add_prefix=None, units=dict(), lonlat=None, namecols=None, keycols=None):
 
-        # Save basic stuff
-        self.units = units
+#__slots__ = ('df', 'units', 'namecols')
+def ext_df(df0, map_wkt, add_prefix=None, units=dict(), lonlat=None, namecols=None, keycols=None):
 
-        # ---------------------------------------------
-        # Mess with projections
-        self.map_wkt = map_wkt
+    # Save basic stuff
+    self_units = units
 
-        # wgs84: lon/lat from selections DataFrame (above)
-        #        (ultimately from glacier location database files)
-        wgs84 = pyproj.CRS.from_epsg("4326")
+    # ---------------------------------------------
+    # Mess with projections
+    self_map_wkt = map_wkt
 
-        # Assume all grids use the same projection (NSIDC Polar Stereographic)
-        # Project everything to it
-        map_crs = pyproj.CRS.from_string(map_wkt)
+    # wgs84: lon/lat from selections DataFrame (above)
+    #        (ultimately from glacier location database files)
+    wgs84 = pyproj.CRS.from_epsg("4326")
 
-        # Transform from lat/lon into map projection
-        transform_wgs84 = pyproj.Transformer.from_crs(wgs84,map_crs,always_xy=True)
-        # -------------------------------------------------
+    # Assume all grids use the same projection (NSIDC Polar Stereographic)
+    # Project everything to it
+    map_crs = pyproj.CRS.from_string(map_wkt)
+
+    # Transform from lat/lon into map projection
+    transform_wgs84 = pyproj.Transformer.from_crs(wgs84,map_crs,always_xy=True)
+    # -------------------------------------------------
 
 
-        # Shallow copy
-        self.df = df0.copy()
+    # Shallow copy
+    self_df = df0.copy()
 
-        
-        # Figure out prefix stuff
-        if add_prefix is None:
-            # Infer common prefix in column names, if any
-            self.prefix = commonprefix(list(df))
-        else:
-            self.prefix = add_prefix
-
-            # Add prefix to existing column names
-            self.df.columns = [add_prefix + str(x) for x in self.df.columns]
-            if namecols is not None:
-                namecols = [self.prefix+x for x in namecols]
-            if keycols is not None:
-                keycols = [self.prefix+x for x in keycols]
-            if lonlat is not None:
-                lonlat = [self.prefix+x for x in lonlat]
-            self.units = {self.prefix+name:val for name,val in self.units.items()}
     
+    # Figure out prefix stuff
+    if add_prefix is None:
+        # Infer common prefix in column names, if any
+        self_prefix = commonprefix(list(df))
+    else:
+        self_prefix = add_prefix
 
-        # Create a 'loc' column based on projecting the lon/lat coordinates of two original cols
-        if lonlat is not None:
-            self.df[self.prefix+'loc'] = points_col(self.df[lonlat[0]], self.df[lonlat[1]], transform_wgs84)
-            self.units[self.prefix+'loc'] = 'm'    # TODO: Fish this out of the projection
-
-        # -------------------------------------------------
-        dropme = set()
-
-        # Create a 'key' column
-        if keycols is not None:
-            self.df[self.prefix+'key'] = list(zip(*[self.df[x] for x in keycols]))
-            self.keycols = keycols
-#            if drop_cols:
-#                dropme.update(self.keycols)
-                #self.df = self.df.drop(self.keycols, axis=1)
-        else:
-            self.keycols = list()
-
-        # Make sure this is a proper unique key
-        dups = self.df[self.prefix+'key'].duplicated(keep=False)
-        dups = dups[dups]
-        if len(dups) > 0:
-            print('============================ Duplicate keys')
-            print(self.df.loc[dups.index])
-
-        # Create an 'allnames' column by zipping all columns indicating any kind of name
+        # Add prefix to existing column names
+        self_df.columns = [add_prefix + str(x) for x in self_df.columns]
         if namecols is not None:
-            self.df[self.prefix+'allnames'] = list(zip(*[self.df[x] for x in namecols]))
-            self.namecols = namecols
-#            if drop_cols:
-#                dropme.update(self.namecols)
-                #self.df = self.df.drop(self.namecols, axis=1)
-        else:
-            self.namecols = list()
+            namecols = [self_prefix+x for x in namecols]
+        if keycols is not None:
+            keycols = [self_prefix+x for x in keycols]
+        if lonlat is not None:
+            lonlat = [self_prefix+x for x in lonlat]
+        self_units = {self_prefix+name:val for name,val in self_units.items()}
 
-        self.df = self.df.drop(list(dropme), axis=1)
+
+    # Create a 'loc' column based on projecting the lon/lat coordinates of two original cols
+    if lonlat is not None:
+        self_df[self_prefix+'loc'] = points_col(self_df[lonlat[0]], self_df[lonlat[1]], transform_wgs84)
+        self_units[self_prefix+'loc'] = 'm'    # TODO: Fish this out of the projection
+
+    # -------------------------------------------------
+    dropme = set()
+
+    # Create a 'key' column
+    if keycols is not None:
+        self_df[self_prefix+'key'] = list(zip(*[self_df[x] for x in keycols]))
+        self_keycols = keycols
+#        if drop_cols:
+#            dropme.update(self_keycols)
+#            #self_df = self_df.drop(self_keycols, axis=1)
+    else:
+        self_keycols = list()
+
+    # Make sure this is a proper unique key
+    dups = self_df[self_prefix+'key'].duplicated(keep=False)
+    dups = dups[dups]
+    if len(dups) > 0:
+        print('============================ Duplicate keys')
+        print(self_df.loc[dups.index])
+
+    # Create an 'allnames' column by zipping all columns indicating any kind of name
+    if namecols is not None:
+        self_df[self_prefix+'allnames'] = list(zip(*[self_df[x] for x in namecols]))
+        self_namecols = namecols
+#        if drop_cols:
+#            dropme.update(self_namecols)
+#            #self_df = self_df.drop(self_namecols, axis=1)
+    else:
+        self_namecols = list()
+
+    self_df = self_df.drop(list(dropme), axis=1)
+
+    return ExtDf(self_prefix, self_df, self_units, self_keycols, self_map_wkt)
 
 # ================================================================
 # ================================================================
@@ -230,8 +240,8 @@ def max_levenshtein(names0, names1):
 #    nm0 = [x for x in names0 if len(x)>0]
 #    nm1 = [x for x in names1 if len(x)>0]
     for n0,n1 in itertools.product(
-        (x for x in names0 if len(x)>0),
-        (x for x in names1 if len(x)>0)):
+        (x for x in names0 if type(x) != float and len(x)>0),
+        (x for x in names1 if type(x) != float and len(x)>0)):
         dir_and_ratio = max(dir_and_ratio, levenshtein(n0,n1))
 
         # OPTIMIZATION: If we already found a full match, we're done!
@@ -281,6 +291,40 @@ df0 and df1 are DataFrames, selecting out just the cols we want to join.
     })
 
 # ============================================================
+def check_dups(df, keycol, ignore_dups=False):
+    """Checks for duplicate values of a column in a DataFrame.
+    If dups are found, return the duplicated rows, sorted by the column.
+
+    df: DataFrame
+    col: str
+        Column to check for dups in
+    """
+    # Check for duplicate left keys
+    dups0 = df[keycol].duplicated(keep=False)
+    dups = dups0[dups0]
+
+    # Remove all dups for testing...
+    if ignore_dups:
+        df = df[~dups0]
+    else:
+        if len(dups) > 0:
+            ddf = pd.merge(df, dups, how='inner', left_index=True, right_index=True, suffixes=(None,'_DELETEME'))
+
+            ddf = ddf.drop(
+                [x for x in ddf.columns if x.endswith('_DELETEME')], axis=1)
+            ddf = ddf.sort_values([keycol])
+
+            raise JoinError(
+                'Multiple right values found in left outer join.',
+                ddf)
+    return df
+
+
+class JoinError(ValueError):
+    def __init__(self, msg, df):
+        super().__init__(msg)
+        self.df = df
+
 class Match(gicollections.MutableNamedTuple):
     __slots__ = (
         'xfs',     # (left, right): ExtDfs being joined
@@ -299,7 +343,7 @@ class Match(gicollections.MutableNamedTuple):
           1. No more than copy of each row of the left ExtDf
           2. Columns: [<left>_ix, <left>_key, <right>_ix, <right>_key]
 
-        Raises a ValueError if the (1) cannot be satisfied.
+        Raises a JoinError if the (1) cannot be satisfied.
 
         match: Match
             Raw result of a match
@@ -308,7 +352,7 @@ class Match(gicollections.MutableNamedTuple):
             Contains columns: [<left>_key, <right>_key]
         ignore_dups:
             Remove any duplicate rows (on the left key) from the join.
-            Otherwise, raise a ValueError on any duplicate rows.
+            Otherwise, raise a JoinError on any duplicate rows.
         right_cols: [str, ...]
             Names of columns from right DataFrame to keep.
             If None, keep all columns.
@@ -328,52 +372,53 @@ class Match(gicollections.MutableNamedTuple):
 
         # Add index columns to overrides (for convenient joining w/ other tables)
         for xf in self.xfs:
-            print('xf={}'.format(xf))
+#            print('xf={}'.format(xf))
             df = xf.df
             key = xf.prefix+'key'
 
-            print('key ',key)
-            print('over ',overrides.columns)
-            print('df ',df.columns)
+#            print('key ',key)
+#            print('over ',overrides.columns)
+#            print('df ',df.columns)
 
             overrides = pd.merge(overrides, df[[key]].reset_index(), how='left', on=key) \
                 .rename(columns={'index':xf.prefix+'ix'})
 
-        # Remove extraneous columns
-        df = self.df[[left_ix, left_key, right_ix, right_key]]
+        # Check for dups in overrides
+        dups0 = overrides[left_key].duplicated(keep=False)
+        dups = dups0[dups0]
 
         # Remove overridden rows (from left) from our match DataFrame
-        df = pd.merge(df, overrides[[left_key]], how='left', on=left_key, indicator=True)
+        df = pd.merge(self.df, overrides[[left_key]], how='left', on=left_key, indicator=True)
         df = df[df['_merge'] != 'both'].drop(['_merge'], axis=1)
-
-        # Add in (manual) overrides
-        if len(overrides) > 0:
-            df = pd.concat([overrides,df], ignore_index=True)
 
         # Check for duplicate left keys
         dups0 = df[left_key].duplicated(keep=False)
         dups = dups0[dups0]
-        # df.loc[dups.index].sort_values(xf0.prefix+'key')
 
         # Remove all dups for testing...
         if ignore_dups:
             df = df[~dups0]
-            #df.sort_values(xf0.prefix+'key')
         else:
-            #print(self.df.columns)
-            print(self.df.index)
-            print(dups.index)
-
-            ddf = pd.merge(self.df, df[[left_key]].loc[dups.index], how='inner', left_index=True, right_index=True, suffixes=(None,'_DELETEME'))
-            drops = {x for x in ddf.columns if x.endswith('_DELETEME')}
-            ddf = ddf.drop(list(drops), axis=1)
-            ddf = ddf.sort_values([left_key, right_key])
-
-            print(len(dups), len(ddf))
             if len(dups) > 0:
-                raise ValueError('\n'.join([
-                    'Duplicate right values found in left outer join.',
-                    ddf.to_string()]))
+                ddf = pd.merge(df, dups, how='inner', left_index=True, right_index=True, suffixes=(None,'_DELETEME'))
+
+                drops = {x for x in ddf.columns if x.endswith('_DELETEME')}
+                ddf = ddf.drop(list(drops), axis=1)
+                ddf = ddf.sort_values([left_key, right_key])
+
+                raise JoinError(
+                    'Multiple right values found in left outer join.',
+                    ddf)
+
+        # ----------------------------------------------------
+        # Remove extraneous columns
+        df = df0[[left_ix, left_key, right_ix, right_key]]
+
+        # Add in (manual) overrides (and re-index)
+        if len(overrides) > 0:
+            
+            df = pd.concat([overrides,df], ignore_index=True)
+
         matchdf = df
 
         # -------------------------------------------
@@ -398,7 +443,7 @@ class Match(gicollections.MutableNamedTuple):
         if (right_cols is not None) and (right_key not in right_cols):
             drops.add(right_key)
         df = df.drop(drops, axis=1)
-        print(df.columns)
+#        print(df.columns)
         return df
 
 def match_allnames(xf0, xf1):
@@ -511,7 +556,7 @@ def read_bkm15(map_wkt):
         'New_Greenl' : 'new_greenl_name', 'Old_Greenl' : 'old_greenl_name', 'Foreign_na' : 'foreign_name',
         'Official_n' : 'official_name', 'Alternativ' : 'alt'})
 
-    return ExtDf(df, map_wkt,
+    return ext_df(df, map_wkt,
         add_prefix='bkm15_',
         keycols=['id'],
         lonlat=('lon','lat'),
@@ -535,7 +580,7 @@ def read_m17(map_wkt):
         .drop('id', axis=1)
     df = df[df.name != 'TOTAL']
 
-    return ExtDf(df, map_wkt,
+    return ext_df(df, map_wkt,
         add_prefix='m17_',
         units=units,
         keycols=['name','lon','lat'],
@@ -661,7 +706,7 @@ def read_w21(map_wkt):
     #df.columns = ['w21_' + str(x) for x in df.columns]
 
 
-    return ExtDf(df, map_wkt, add_prefix='w21_', units=col_units,
+    return ext_df(df, map_wkt, add_prefix='w21_', units=col_units,
         keycols=['popular_name', 'flux_basin_mouginot_2019'],
         namecols=['popular_name', 'greenlandic_name'])
 
@@ -682,7 +727,7 @@ def read_mwb(map_wkt):
     # Remove the "ICE_CAPS_NW" polygon
     df = df[df['name_ac'] != 'ICE_CAPS_NW']
 
-    return ExtDf(df, map_wkt, add_prefix='mwb_',
+    return ext_df(df, map_wkt, add_prefix='mwb_',
         units={'basin_poly': 'm'},
         keycols=['name_ac'],
         namecols=['name_ac', 'name'])
@@ -700,7 +745,7 @@ def read_fj(map_wkt):
         .rename(columns={'_shape':'poly'})
     df = df.reset_index().rename(columns={'index':'serial'})    # Add a key column
 
-    return ExtDf(df, map_wkt, add_prefix='fj_',
+    return ext_df(df, map_wkt, add_prefix='fj_',
         units={'fjord_poly': 'm'},
         keycols=['serial'])
 
@@ -744,7 +789,7 @@ def read_cf20(map_wkt):
         .rename(columns={'GlacierID':'glacier_id', 'GrnlndcN':'greenlandic_name', 'OfficialN':'official_name', 'AltName':'alt_name', 'RefName':'ref_name'})
 
 
-    return ExtDf(df, map_wkt, add_prefix='cf20_',
+    return ext_df(df, map_wkt, add_prefix='cf20_',
         units={'basin_poly': 'm'},
         keycols=['glacier_id'],
         namecols=['greenlandic_name', 'official_name', 'alt_name', 'ref_name'])
