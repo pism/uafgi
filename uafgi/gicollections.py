@@ -21,3 +21,12 @@ class MutableNamedTuple(collections.abc.Sequence):
         return getattr(self, self.__slots__[index])
     def __len__(self):
         return len(self.__slots__)
+    def __copy__(self):
+        return type(self)(*[getattr(self, x) for x in self.__slots__])
+
+    def replace(self, **kwargs):
+        """Copy, replacing some slots with new values"""
+        ret = self.__copy__()
+        for key,val in kwargs.items():
+            setattr(ret, key,val)
+        return ret
