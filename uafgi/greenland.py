@@ -381,37 +381,23 @@ class Match(gicollections.MutableNamedTuple):
         if overrides is None:
             overrides = pd.DataFrame(columns=[left_ix, left_key, right_ix, right_key])
 
-        # Add index columns to overrides (for convenient joining w/ other tables)
-        for xf in self.xfs:
-            df = xf.df
-            key = xf.prefix+'key'
+        else:
+            # Add index columns to overrides (for convenient joining w/ other tables)
+            for xf in self.xfs:
+                df = xf.df
+                key = xf.prefix+'key'
 
-            overrides = pd.merge(overrides, df[[key]].reset_index(), how='left', on=key) \
-                .rename(columns={'index':xf.prefix+'ix'})
+                overrides = pd.merge(overrides, df[[key]].reset_index(), how='left', on=key) \
+                    .rename(columns={'index':xf.prefix+'ix'})
 
-        # Add prefix to columns in overrides (but not to existing key/index cols)
-        keep = {left_ix, left_key, right_ix, right_key}
-        overrides.columns = [
-            x if x in keep else 'over_' + str(x)
-            for x in overrides.columns]
+            # Keep only the required columns
+            overrides = overrides[[left_ix, left_key, right_ix, right_key]]
+
+            # Remove rows with missing right_key
+            overrides = overrides.dropna(how='any', axis=0)
 
         # Make sure there are no duplicates in overrides
         overrides = check_dups(overrides, 'overrides', left_key)
-
-        # Join overrides with our merge table
-        df = pd.merge(self.df, overrides[[left_key,right_key]], how='left', on=left_key, indicator=True, suffixes=(None,'_over'))
-
-
-
-        # Replace select columns in merge with corresponding overrides
-#        df = pd.merge(self.df, overrides, how='left', on=left_key, indicator=True)
-
-
-
-
-        print(self.df.columns)
-        print(overrides.columns)
-        return
 
         # Remove overridden rows (from left) from our match DataFrame
         df = pd.merge(self.df, overrides[[left_key]], how='left', on=left_key, indicator=True)
@@ -424,7 +410,6 @@ class Match(gicollections.MutableNamedTuple):
 
         # Add in (manual) overrides (and re-index)
         if len(overrides) > 0:
-            
             df = pd.concat([overrides,df], ignore_index=True)
 
         matchdf = df
@@ -453,6 +438,59 @@ class Match(gicollections.MutableNamedTuple):
         df = df.drop(drops, axis=1)
 
         return self.xfs[0].replace(df=df)
+
+def override_cols(df, overrides, keycol, cols):
+    """Joins df with overrides on keycol; and replaces any of df.cols with overrides.cols
+
+    keycol:
+        Name of column to join on between df and overrides
+    cols: [spec, ...]
+        List of columns to match and override.
+        Each spec specifies:
+          * Name of column in df
+          * Name of column in overrides
+          * Name of column in resulting DataFrame
+        Spec can be:
+
+        col (str):
+            Name of column in df, overrides and the result
+        (df_col, over_col):
+            Name of column in df and overrides.
+            Resulting column will be named same as df_col
+        (df_col, over_col, result_col):
+            All three spelled out
+    """
+
+    # Translate the specs to most verbose form
+    cols0 = cols
+    cols = list()
+    for spec in cols0:
+        if type(spec) == str:
+            cols.append((spec, spec, spec))
+        elif type(spec) == tuple:
+            if len(spec) == 2:
+                cols.append((spec[0], spec[1], spec[0]))
+            elif len(spec) == 3:
+                cols.append(spec)
+            else:
+                raise TypeError(spec)
+        else:
+            raise TypeError(spec)
+
+    ocols = [x[1] for x in cols]
+    overrides = overrides[[keycol] + ocols] \
+        .rename(columns=dict((x,x+'_OVERRIDE') for x in ocols))
+
+    df = pd.merge(df, overrides, how='left', on=keycol)
+    print(df.columns)
+    for df_col, over_col, result_col in cols:
+        df[result_col] = df[over_col+'_OVERRIDE'].fillna(df[df_col])
+        drops = [over_col+'_OVERRIDE']
+        if result_col != df_col:
+            drops.append(df_col)
+        df = df.drop(drops, axis=1)
+
+    return df
 
 def match_allnames(xf0, xf1):
 
