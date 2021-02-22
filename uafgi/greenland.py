@@ -9,6 +9,9 @@ import os
 from uafgi import ioutil,shputil,gicollections,functional
 import csv
 import numpy as np
+import pandas_ods_reader
+from uafgi.nsidc import nsidc0481
+import shapely.ops
 
 def sep_colnames(lst):
     """Process colnames and units into names list and units dict"""
@@ -119,7 +122,12 @@ def ext_df(df0, map_wkt, add_prefix=None, units=dict(), lonlat=None, namecols=No
 
     # Create a 'key' column
     if keycols is not None:
-        self_df[self_prefix+'key'] = list(zip(*[self_df[x] for x in keycols]))
+        if len(keycols) == 1:
+            # Key column is just renamed other column
+            self_df[self_prefix+'key'] = self_df[keycols[0]]
+        else:
+            # Put in a tuple
+            self_df[self_prefix+'key'] = list(zip(*[self_df[x] for x in keycols]))
         self_keycols = keycols
 #        if drop_cols:
 #            dropme.update(self_keycols)
@@ -223,7 +231,6 @@ def fix_name(name):
         ret = (' '.join(words[:-1]), words[-1])
     else:
         ret = (' '.join(words), '')
-#    print(ret)
     return ret
  
 def levenshtein(name0, name1):
@@ -291,9 +298,10 @@ df0 and df1 are DataFrames, selecting out just the cols we want to join.
     })
 
 # ============================================================
-def check_dups(df, keycol, ignore_dups=False):
+def check_dups(df, name, keycol, ignore_dups=False):
     """Checks for duplicate values of a column in a DataFrame.
     If dups are found, return the duplicated rows, sorted by the column.
+    Or... it just removes the dups from the dataframe.
 
     df: DataFrame
     col: str
@@ -314,8 +322,9 @@ def check_dups(df, keycol, ignore_dups=False):
                 [x for x in ddf.columns if x.endswith('_DELETEME')], axis=1)
             ddf = ddf.sort_values([keycol])
 
+            print(ddf)
             raise JoinError(
-                'Multiple right values found in left outer join.',
+                'Multiple right values found in left outer join to {}'.format(name),
                 ddf)
     return df
 
@@ -336,7 +345,7 @@ class Match(gicollections.MutableNamedTuple):
             str(list(zip(self.xfs, self.cols))),
             len(self.df))
 
-    def left_join(self, overrides=None, ignore_dups=False, right_cols=None):
+    def left_join(self, overrides=None, ignore_dups=False, match_cols=None, right_cols=None):
 
         """Given a raw Match, returns a DataFrame that can be used for a left
         outer join.  It will have (assuming ExtDfs named 
@@ -353,6 +362,8 @@ class Match(gicollections.MutableNamedTuple):
         ignore_dups:
             Remove any duplicate rows (on the left key) from the join.
             Otherwise, raise a JoinError on any duplicate rows.
+        match_cols: [str, ...]
+            Columns from the match dataframe to keep in final result.
         right_cols: [str, ...]
             Names of columns from right DataFrame to keep.
             If None, keep all columns.
@@ -372,47 +383,44 @@ class Match(gicollections.MutableNamedTuple):
 
         # Add index columns to overrides (for convenient joining w/ other tables)
         for xf in self.xfs:
-#            print('xf={}'.format(xf))
             df = xf.df
             key = xf.prefix+'key'
-
-#            print('key ',key)
-#            print('over ',overrides.columns)
-#            print('df ',df.columns)
 
             overrides = pd.merge(overrides, df[[key]].reset_index(), how='left', on=key) \
                 .rename(columns={'index':xf.prefix+'ix'})
 
-        # Check for dups in overrides
-        dups0 = overrides[left_key].duplicated(keep=False)
-        dups = dups0[dups0]
+        # Add prefix to columns in overrides (but not to existing key/index cols)
+        keep = {left_ix, left_key, right_ix, right_key}
+        overrides.columns = [
+            x if x in keep else 'over_' + str(x)
+            for x in overrides.columns]
+
+        # Make sure there are no duplicates in overrides
+        overrides = check_dups(overrides, 'overrides', left_key)
+
+        # Join overrides with our merge table
+        df = pd.merge(self.df, overrides[[left_key,right_key]], how='left', on=left_key, indicator=True, suffixes=(None,'_over'))
+
+
+
+        # Replace select columns in merge with corresponding overrides
+#        df = pd.merge(self.df, overrides, how='left', on=left_key, indicator=True)
+
+
+
+
+        print(self.df.columns)
+        print(overrides.columns)
+        return
 
         # Remove overridden rows (from left) from our match DataFrame
         df = pd.merge(self.df, overrides[[left_key]], how='left', on=left_key, indicator=True)
         df = df[df['_merge'] != 'both'].drop(['_merge'], axis=1)
-
-        # Check for duplicate left keys
-        dups0 = df[left_key].duplicated(keep=False)
-        dups = dups0[dups0]
-
-        # Remove all dups for testing...
-        if ignore_dups:
-            df = df[~dups0]
-        else:
-            if len(dups) > 0:
-                ddf = pd.merge(df, dups, how='inner', left_index=True, right_index=True, suffixes=(None,'_DELETEME'))
-
-                drops = {x for x in ddf.columns if x.endswith('_DELETEME')}
-                ddf = ddf.drop(list(drops), axis=1)
-                ddf = ddf.sort_values([left_key, right_key])
-
-                raise JoinError(
-                    'Multiple right values found in left outer join.',
-                    ddf)
+        df = check_dups(df, left.prefix, left_key, ignore_dups=ignore_dups)
 
         # ----------------------------------------------------
         # Remove extraneous columns
-        df = df0[[left_ix, left_key, right_ix, right_key]]
+        df = df[[left_ix, left_key, right_ix, right_key]]
 
         # Add in (manual) overrides (and re-index)
         if len(overrides) > 0:
@@ -443,8 +451,8 @@ class Match(gicollections.MutableNamedTuple):
         if (right_cols is not None) and (right_key not in right_cols):
             drops.add(right_key)
         df = df.drop(drops, axis=1)
-#        print(df.columns)
-        return df
+
+        return self.xfs[0].replace(df=df)
 
 def match_allnames(xf0, xf1):
 
@@ -498,7 +506,7 @@ def polys_overlapping_points(points_s, polys, poly_outs, poly_label='poly'):
 
         # Find intersections between terminus locations and this grid
         # NOTE: intersects includes selections.index
-        intersects = points_s[points_s.map(lambda p: poly.intersects(p))]
+        intersects = points_s[points_s.map(lambda p: poly.intersects(p) if type(p) == shapely.geometry.Point else False)]
 
         out_s.append(pd.Series(index=intersects.index, data=[poly_out] * len(intersects),name=poly_label))
 
@@ -520,6 +528,7 @@ def match_point_poly(left, left_point, right, right_poly, left_cols=None, right_
     keyseries = polys_overlapping_points(left.df[left_point], right.df[right_poly], right.df.index)#mwb.df['mwb_key'])
     keyseries.name = right.prefix+'ix'
     matchdf = keyseries.reset_index().rename(columns={'index':left.prefix+'ix'})
+
     # Add in extra cols
     for xcols,xf in zip((left_cols,right_cols), (left,right)):
         key = xf.prefix+'key'
@@ -547,7 +556,7 @@ def read_bkm15(map_wkt):
     df = pd.read_csv('data/GreenlandGlacierNames/tc-9-2215-2015-supplement.csv')
 
     # Keep only glaciers on the ice sheet (285 of them)
-    df = df[df['Type'] == 'GrIS']
+#    df = df[df['Type'] == 'GrIS']
     #assert(len(df) == 285)
 
     # Drop columns not useful for GrIS glaciers
@@ -686,7 +695,6 @@ def read_w21(map_wkt):
                 col.replace('--', np.nan, inplace=True)
                 col.replace('#DIV/0!', np.nan, inplace=True)
                 col.replace('', np.nan, inplace=True)
-            #print(col)
 
             # Construct new set of columns
             df1_cols[col1] = col.astype(dtype)#.rename(col1)
@@ -697,7 +705,6 @@ def read_w21(map_wkt):
         df = df[~df.popular_name.str.contains('Total')]
         df = df[~df.popular_name.str.contains('Mean')]
 
-        #print(df.columns.values.tolist())
         dfs.append(df)
 
     df = pd.concat(dfs).reset_index(drop=True)
@@ -722,7 +729,6 @@ def read_mwb(map_wkt):
         .drop('_shape0', axis=1) \
         .rename(columns={'basin':'basin', 'Name_AC':'name_ac', 'gl_type':'gl_type',
         'id':'id', 'id2':'id2', 'UGID':'ugid', 'Name':'name', '_shape':'basin_poly'})
-#    print(df.columns)
 
     # Remove the "ICE_CAPS_NW" polygon
     df = df[df['name_ac'] != 'ICE_CAPS_NW']
@@ -800,6 +806,101 @@ def read_cf20(map_wkt):
 
 
 # =====================================================================
+def csv_to_tuple(val):
+    """Converts key column value from comma-separated format to standard
+    format."""
+
+    if (type(val) == float) or (val is None):
+        return val
+
+    parts = val.split(',')
+    if len(parts) == 1:
+        return parts[0]
+    return tuple(parts)
+
+def read_overrides(overrides_ods, locations_shp, keycols, join_col, map_wkt):
+
+    """Reads an per-project overrides table, ready to use as overrides in
+    joins.  The table is read as a combination of an ODS file and a
+    shapefile containing the locations of termini; with an attribute
+    in the shapefile matching a column in the overrides_ods file.
+
+    The location of the terminus points is returned in the columns:
+        lat, lon: degrees
+        loc: shapely.geometry.Point
+
+    Args:
+        overrides_ods: filename
+            Name of the overrides file (ODS format)
+            Must contain at least column: <join_col>
+
+        locations_shp: filename
+            Name of the shapefile identifying a location point for each glacier.
+            Must contain at least one attribute: <join_col>
+
+        keycols: [str, ...]
+            Names of columns that are keys (in both datasources).
+            Comma-separate them and turn into tuples.
+
+        join_col: str
+            Name of column used to join overrides and locations
+
+    """
+
+    # Manual overrides spreadsheet
+    over = pandas_ods_reader.read_ods(overrides_ods,1)
+    over = over.drop('comment', axis=1)
+    over = over.dropna(how='all')    # Remove blank lines
+
+    # Manual glacier point locations
+    tl = pd.DataFrame(shputil.read(locations_shp, map_wkt))
+
+    # Convert keycols to tuples
+    for df in (over,tl):
+        for col in keycols:
+            df[col] = df[col].map(csv_to_tuple)
+
+    # Mark to remove any "extra" columns that we didn't actually join with
+    df = pd.merge(over,tl,how='left',on='w21_key', suffixes=(None,'_DELETEME'))
+
+
+    # Move data from the shapefile to override the lon/lat columns
+    df = df.rename(columns={'_shape' : 'loc'})
+    lon = df['_shape0'].map(lambda xy: xy if type(xy)==float else xy.x)
+    lat = df['_shape0'].map(lambda xy: xy if type(xy)==float else xy.x)
+
+    # Merge the shapefile and spreadsheet lat/lon, if available.
+    if 'lon' in df:
+        df['lon'] = df['_shape0'].map(lambda xy: xy if type(xy)==float else xy.x).fillna(df['lon'])
+    if 'lat' in df:
+        df['lat'] = df['_shape0'].map(lambda xy: xy if type(xy)==float else xy.x).fillna(df['lat'])
+
+    # Remove extraneous columns
+    drops = ['_shape0'] + [x for x in df.columns if x.endswith('_DELETEME')]
+    df = df.drop(drops, axis=1)
+    return df
+
+def read_ns481(map_wkt):
+    from uafgi.nsidc import nsidc0481
+    df = nsidc0481.load_grids()
+
+    # Reproject grid dimension polygons
+    crs1 = pyproj.CRS.from_string(map_wkt)
+    def _reproject(x):
+        if x.wkt == map_wkt:
+            # Optimization: reprojection not needed
+            return x.poly
+        else:
+            crs0 = pyproj.CRS.from_string(x.wkt)
+            transform = pyproj.Transformer.from_crs(crs0, crs1)
+            poly1 = shapely.ops.transform(transform.transform, x.poly)
+            return poly1
+
+    df['poly'] = df.apply(_reproject, axis=1)
+    del df['wkt']
+
+    return ext_df(df, map_wkt, add_prefix='ns481_', keycols=['grid'])
+
 
 # Standard Greenland Stereographic Projection
 #map_wkt = "PROJCS[\"WGS 84 / NSIDC Sea Ice Polar Stereographic North\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Polar_Stereographic\"],PARAMETER[\"latitude_of_origin\",70],PARAMETER[\"central_meridian\",-45],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",SOUTH],AXIS[\"Northing\",SOUTH],AUTHORITY[\"EPSG\",\"3413\"]]"
