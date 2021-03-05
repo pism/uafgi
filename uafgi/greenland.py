@@ -404,7 +404,7 @@ class Match(gicollections.MutableNamedTuple):
             # Keep only the required columns
             overrides = overrides[[left_ix, left_key, right_ix, right_key]]
 
-            # Remove rows with missing right_key
+            # Remove rows with missing right_key or left_key
             overrides = overrides.dropna(how='any', axis=0)
 
         # Make sure there are no duplicates in overrides
