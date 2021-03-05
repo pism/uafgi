@@ -12,6 +12,8 @@ import numpy as np
 import pandas_ods_reader
 from uafgi.nsidc import nsidc0481
 import shapely.ops
+import datetime
+import copy
 
 def sep_colnames(lst):
     """Process colnames and units into names list and units dict"""
@@ -323,8 +325,9 @@ def check_dups(df, name, keycol, ignore_dups=False):
             ddf = ddf.sort_values([keycol])
 
             print(ddf)
+            ddf.to_csv('multi_err.csv')
             raise JoinError(
-                'Multiple right values found in left outer join to {}'.format(name),
+                'Multiple values of keycol {} found in {}'.format(keycol, name),
                 ddf)
     return df
 
@@ -344,6 +347,10 @@ class Match(gicollections.MutableNamedTuple):
         return 'Match({}, len={})'.format(
             str(list(zip(self.xfs, self.cols))),
             len(self.df))
+
+    def swap(self):
+        """Swaps left and right, returns new Match object"""
+        return Match(self.xfs[::-1], self.cols[::-1], self.df)
 
     def left_join(self, overrides=None, ignore_dups=False, match_cols=None, right_cols=None):
 
@@ -387,8 +394,12 @@ class Match(gicollections.MutableNamedTuple):
                 df = xf.df
                 key = xf.prefix+'key'
 
-                overrides = pd.merge(overrides, df[[key]].reset_index(), how='left', on=key) \
-                    .rename(columns={'index':xf.prefix+'ix'})
+                try:
+                    overrides = pd.merge(overrides, df[[key]].reset_index(), how='left', on=key) \
+                        .rename(columns={'index':xf.prefix+'ix'})
+                except KeyError as ke:
+                    print('Is a column missing from your overrides table?')
+                    raise
 
             # Keep only the required columns
             overrides = overrides[[left_ix, left_key, right_ix, right_key]]
@@ -461,6 +472,10 @@ def override_cols(df, overrides, keycol, cols):
             All three spelled out
     """
 
+    # Ensure no dups in this (user-generated) table
+    check_dups(overrides, 'overrides', keycol)
+
+
     # Translate the specs to most verbose form
     cols0 = cols
     cols = list()
@@ -482,7 +497,6 @@ def override_cols(df, overrides, keycol, cols):
         .rename(columns=dict((x,x+'_OVERRIDE') for x in ocols))
 
     df = pd.merge(df, overrides, how='left', on=keycol)
-    print(df.columns)
     for df_col, over_col, result_col in cols:
         df[result_col] = df[over_col+'_OVERRIDE'].fillna(df[df_col])
         drops = [over_col+'_OVERRIDE']
@@ -523,7 +537,49 @@ def match_allnames(xf0, xf1):
 
     return Match((xf0,xf1), (xf0.prefix+'allnames', xf1.prefix+'allnames'), xcols)
 
-def polys_overlapping_points(points_s, polys, poly_outs, poly_label='poly'):
+# -------------------------------------------------------------------
+def _point_poly_intersects(poly, threshold):
+    def intersect_fn(p):    # p is Point or (Point, ...) or NaN
+        if poly is None or (type(poly) == float and np.isnan(poly)):
+            return False
+
+        if type(p) == shapely.geometry.Point:
+            return poly.intersects(p)
+        elif type(p) == shapely.geometry.LineString:
+            # Does it intersect
+            return poly.intersects(p)
+        elif type(p) == shapely.geometry.MultiPoint:
+            # Proportion of points that overlap the polygon
+            nintersect = 0
+            for pp in p:
+                if poly.intersects(pp):
+                    nintersect += 1
+            frac = (nintersect / len(p))
+            return frac > threshold
+#        elif type(p) == shapely.geometry.MultiLineString:
+#            # Proportion of points that overlap the polygon
+#            nintersect = 0
+#            ntot = 0
+##            coords = [x.coords for x in p]
+##            print(coords)
+##            print(len(coords))
+#            types = [type(x) for x in p]
+#            print('ttttttttt======================= ', types)
+#            for ls in p:    # LineString
+#                for xy in ls.coords:    # Point
+#                    pp = shapely.geometry.Point(*xy)
+#                    ntot += 1
+#                    if poly.intersects(pp):
+#                        nintersect += 1
+#            frac = (float(nintersect) / ntot)
+#            if nintersect>0:
+#                print(nintersect, ntot)
+#            return frac > threshold
+        else:
+            return False
+    return intersect_fn
+
+def polys_overlapping_points(points_s, polys, poly_outs, poly_label='poly', threshold=.95):
 
     """Given a list of points and polygons... finds which polygons overlap
     each point.
@@ -544,14 +600,16 @@ def polys_overlapping_points(points_s, polys, poly_outs, poly_label='poly'):
 
         # Find intersections between terminus locations and this grid
         # NOTE: intersects includes selections.index
-        intersects = points_s[points_s.map(lambda p: poly.intersects(p) if type(p) == shapely.geometry.Point else False)]
+        ppi_fn = _point_poly_intersects(poly, threshold)
+        intersects = points_s[points_s.map(ppi_fn)]
+#        intersects = points_s[points_s.map(lambda p: poly.intersects(p) if type(p) == shapely.geometry.Point else False)]
 
         out_s.append(pd.Series(index=intersects.index, data=[poly_out] * len(intersects),name=poly_label))
 
     grids = pd.concat(out_s, axis=0)
     return grids
 
-def match_point_poly(left, left_point, right, right_poly, left_cols=None, right_cols=None):
+def match_point_poly(left, left_point, right, right_poly, left_cols=None, right_cols=None, threshold=.95):
     """Creates a Match object, looking for points in <left> contained in polygon in <right>
     left, right: ExtDf
         Datasets to match
@@ -563,7 +621,9 @@ def match_point_poly(left, left_point, right, right_poly, left_cols=None, right_
         Additional columns from left and right to include in the match dataframe
     """
 
-    keyseries = polys_overlapping_points(left.df[left_point], right.df[right_poly], right.df.index)#mwb.df['mwb_key'])
+    keyseries = polys_overlapping_points(
+        left.df[left_point], right.df[right_poly], right.df.index,
+        threshold=threshold)
     keyseries.name = right.prefix+'ix'
     matchdf = keyseries.reset_index().rename(columns={'index':left.prefix+'ix'})
 
@@ -809,6 +869,7 @@ def read_cf20(map_wkt):
         match = calfinRE.match(leaf)
         if match is None:
             continue
+
         fname = os.path.join(ddir,leaf)
 
         df = pd.DataFrame(shputil.read(fname, map_wkt, read_shape=False))
@@ -816,6 +877,7 @@ def read_cf20(map_wkt):
         # All the rows are the same, except different terminus line / position / etc
         row = df.loc[0].to_dict()
         row['fname'] = fname
+        row['uniqename'] = match.group(3).replace('-',' ')
 
         # Discard columns that aren't constant through the entire shapefile
         for col in ('Center_X', 'Center_Y', 'Latitude', 'Longitude', 'QualFlag', 'Satellite', 'Date', 'ImageID', 'Author'):
@@ -835,7 +897,7 @@ def read_cf20(map_wkt):
 
     return ext_df(df, map_wkt, add_prefix='cf20_',
         units={'basin_poly': 'm'},
-        keycols=['glacier_id'],
+        keycols=['uniqename'],
         namecols=['greenlandic_name', 'official_name', 'alt_name', 'ref_name'])
 
 
@@ -911,13 +973,14 @@ def read_overrides(overrides_ods, locations_shp, keycols, join_col, map_wkt):
     if 'lon' in df:
         df['lon'] = df['_shape0'].map(lambda xy: xy if type(xy)==float else xy.x).fillna(df['lon'])
     if 'lat' in df:
-        df['lat'] = df['_shape0'].map(lambda xy: xy if type(xy)==float else xy.x).fillna(df['lat'])
+        df['lat'] = df['_shape0'].map(lambda xy: xy if type(xy)==float else xy.y).fillna(df['lat'])
 
     # Remove extraneous columns
     drops = ['_shape0'] + [x for x in df.columns if x.endswith('_DELETEME')]
     df = df.drop(drops, axis=1)
     return df
 
+@functional.memoize
 def read_ns481(map_wkt):
     from uafgi.nsidc import nsidc0481
     df = nsidc0481.load_grids()
@@ -940,8 +1003,82 @@ def read_ns481(map_wkt):
     return ext_df(df, map_wkt, add_prefix='ns481_', keycols=['grid'])
 
 
+def _parse_daterange(srange):
+    return tuple(datetime.datetime.strptime(x,'%d%b%Y') for x in srange.split('-'))
+
+@functional.memoize
+def read_ns642(map_wkt):
+    """Reads annual terminus lines"""
+
+    ddir = 'data/measures-nsidc0642'
+    terminiRE = re.compile(r'termini_(\d\d)(\d\d)_v01\.2\.shp')
+    dfs = list()
+    leaves = [list(), list()]    # Format changes between 2012/13 and 2014/15
+    for leaf in os.listdir(ddir):
+        match = terminiRE.match(leaf)
+        if match is not None:
+            y0 = 2000+int(match.group(1))
+            y1 = 2000+int(match.group(2))
+            leaves[0 if y0<2014 else 1].append((leaf,y0,y1))
+
+    all_namecols = ['GlacName', 'GrnlndcNam', 'Name','Official_n', 'AltName', 'GrnlndcNam']
+    for leaf,y0,y1 in sorted(leaves[0]):
+        df = pd.DataFrame(shputil.read(os.path.join(ddir,leaf), map_wkt))
+        df['year0'] = y0
+        df['year1'] = y1
+        namecols = [x for x in all_namecols if x in df.columns]
+        df['allnames'] = list(zip(*[df[x] for x in (namecols)]))
+        df['date'] = df['DateRange'].map(_parse_daterange)
+        df = df.drop(['_shape0', 'DateRange'] + namecols, axis=1)
+        dfs.append(df)
+
+    # Different data format 2014 and beyond
+    for leaf,y0,y1 in sorted(leaves[1]):
+        df = pd.DataFrame(shputil.read(os.path.join(ddir,leaf), map_wkt))
+        df['year0'] = y0
+        df['year1'] = y1
+        namecols = [x for x in all_namecols if x in df.columns]
+        df['allnames'] = list(zip(*[df[x] for x in (namecols)]))
+        df['date'] = df['DATE'].map(lambda x: datetime.datetime.strptime(x,'%Y-%m-%d'))
+        df = df.drop(['_shape0', 'DATE'] + namecols, axis=1)
+        dfs.append(df)
+
+
+    df = pd.concat(dfs)
+    df = df.reset_index(drop=True) \
+        .rename(columns={'_shape': 'terminus'}) \
+        .drop('Id', axis=1)
+
+    return ext_df(df, map_wkt,
+        add_prefix='ns642_',
+        keycols=['GlacierID', 'year1'])
+
+
+def ns642_by_glacier_id(ns642):
+    """Collects rows from original ns642 DataFrame by GlacierID"""
+
+    dfg = ns642.df.groupby(by='ns642_GlacierID')
+
+    data = list()
+    for name, gr in dfg:
+#        lines = gr['ns642_terminus'].to_list()
+        pointss = [list(ls.coords) for ls in gr['ns642_terminus']]
+        points = list(itertools.chain.from_iterable(pointss))    # Join to a single list
+#        print('len(pointss) = {}'.format(len(points)))
+#        print(points)
+#        mls = shapely.ops.cascaded_union(lines)
+        data.append([name, shapely.geometry.MultiPoint(points)])
+        
+    df2 = pd.DataFrame(data=data, columns=['ns642_GlacierID', 'ns642_points'])
+    df2['ns642_key'] = df2['ns642_GlacierID']
+    xdf = ns642.replace(df=df2, keycols=['ns642_GlacierID'])
+    return xdf
+
+# --------------------------------------------------------------
+
+
 # Standard Greenland Stereographic Projection
-#map_wkt = "PROJCS[\"WGS 84 / NSIDC Sea Ice Polar Stereographic North\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Polar_Stereographic\"],PARAMETER[\"latitude_of_origin\",70],PARAMETER[\"central_meridian\",-45],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",SOUTH],AXIS[\"Northing\",SOUTH],AUTHORITY[\"EPSG\",\"3413\"]]"
+map_wkt = "PROJCS[\"WGS 84 / NSIDC Sea Ice Polar Stereographic North\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Polar_Stereographic\"],PARAMETER[\"latitude_of_origin\",70],PARAMETER[\"central_meridian\",-45],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",SOUTH],AXIS[\"Northing\",SOUTH],AUTHORITY[\"EPSG\",\"3413\"]]"
 
     
 
