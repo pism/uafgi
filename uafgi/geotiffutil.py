@@ -1,4 +1,4 @@
-from osgel import gdal
+from osgeo import gdal
 
 def read(fname, iband):
     """Reads a GeoTIFF file, returns the raster.

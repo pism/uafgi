@@ -119,6 +119,7 @@ def rasterize_polygons(polygon_ds, gridfile):
     polygon_ds:
         Open GDAL dataset containing polygons in a single layer
         Can be Shapefile, GeoJSON, etc.
+        Eg: poly_ds = gdalutil.open(outlines_shp, driver='ESRI Shapefile')
 
     gridfile:
         Name of NetCDF file containing projection, x, y etc. variables of local grid.
@@ -136,7 +137,7 @@ def rasterize_polygons(polygon_ds, gridfile):
     # src_ds = ogr.GetDriverByName('ESRI Shapefile').CreateDataSource('x.shp')
     src_ds = ogr.GetDriverByName('Memory').CreateDataSource('')
     ogrutil.reproject(polygon_ds, fb.srs, src_ds)
-    src_lyr = src_ds.GetLayer()   # Put layer number or name in her
+    src_lyr = src_ds.GetLayer()   # Put layer number or name in here
 
     # Create destination raster dataset
     dst_ds = clone_geometry('netCDF', 'x.nc', fb, 1,  gdal.GDT_Byte)
@@ -150,15 +151,6 @@ def rasterize_polygons(polygon_ds, gridfile):
     check_error(gdal.RasterizeLayer(dst_ds, bands, src_lyr, burn_values=burn_values))
 
     dst_ds.FlushCache()
-
-    mask_arr=np.flipud(dst_ds.GetRasterBand(1).ReadAsArray())
-    return mask_arr
-
-
-
-
-
-
 
     mask_arr=np.flipud(dst_ds.GetRasterBand(1).ReadAsArray())
     return mask_arr

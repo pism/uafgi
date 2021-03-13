@@ -9,7 +9,7 @@ from osgeo import ogr,gdal
 import shapefile
 import shapely.geometry
 
-from uafgi import cdoutil
+from uafgi import gdalutil
 
 shapely2ogr = {
     'Polygon' : ogr.wkbPolygon,
@@ -86,7 +86,7 @@ def get_transformer(fname, wkt1):
     # See for always_xy: https://proj.org/faq.html#why-is-the-axis-ordering-in-proj-not-consistent
     return pyproj.Transformer.from_crs(crs0, crs1, always_xy=True)
 
-def read(fname, wkt1, read_shape=True):
+def read(fname, wkt1=None, read_shape=True):
     """read_shapes:
         Should the shape actually be read?  (Or just the attributes)?
     """
@@ -273,6 +273,7 @@ def select_feature(ishapefile, fid, oshapefile):
 
     # Select a single polygon out of the shapefile
     cmd = ['ogr2ogr', oshapefile, ishapefile, '-fid', str(fid)]
+    #print(' '.join(cmd))
     subprocess.run(cmd, check=True)
 
 def fjord_mask(termini_closed_file, index, geometry_file, tdir):
@@ -307,51 +308,6 @@ def fjord_mask(termini_closed_file, index, geometry_file, tdir):
 def check_error(err):
     if err != 0:
         raise 'GDAL Error {}'.format(err)
-
-def rasterize_polygons(shapefile, fids, gridfile, tdir):
-    """Generator yields rasterized version of polygons from shapefile.
-
-    shapefile:
-        Name of the shapefile containing the polygon to rasterize
-    layers:
-        Iterable of layers (sections of the shapefile) to rasterize
-        Can be either indices (0-based), or names of layers
-    gridfile:
-        Name of NetCDF file containing projection, x, y etc. variables of local grid.
-        Fine if it also contains data.
-    Yields:
-        Each specified layer in the shapefile, rasterized
-    """
-
-
-    fb = cdoutil.FileInfo(gridfile)
-
-    maskvalue = 1
-
-    for fid in fids:
-
-        # Select single feature into a shapefile
-        # https://gis.stackexchange.com/questions/330811/how-to-rasterize-individual-feature-polygon-from-shapefile-using-gdal-ogr-in-p
-        one_shape = tdir.join('one_shape.shp')
-        select_feature(shapefile, fid, one_shape)
-        print(pathlib.Path(one_shape).stat().st_size)
-
-        src_ds = ogr.Open(one_shape)
-        src_lyr = src_ds.GetLayer()   # Put layer number or name in her
-
-#        dst_ds = gdal.GetDriverByName('netCDF').Create('x{}.nc'.format(fid), int(fb.nx), int(fb.ny), 1 ,gdal.GDT_Byte)
-        dst_ds = gdal.GetDriverByName('MEM').Create('', int(fb.nx), int(fb.ny), 1 ,gdal.GDT_Byte)
-        dst_rb = dst_ds.GetRasterBand(1)
-        dst_rb.Fill(0) #initialise raster with zeros
-        dst_rb.SetNoDataValue(0)
-        dst_ds.SetGeoTransform(fb.geotransform)
-
-        check_error(gdal.RasterizeLayer(dst_ds, [1], src_lyr, burn_values=[maskvalue]))
-
-        dst_ds.FlushCache()
-
-        mask_arr=np.flipud(dst_ds.GetRasterBand(1).ReadAsArray())
-        yield mask_arr
 
 def crs(shapefile):
     """Reads the coordinate reference system (CRS) out of a shapefile.

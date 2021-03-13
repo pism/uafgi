@@ -324,6 +324,7 @@ def check_dups(df, name, keycol, ignore_dups=False):
                 [x for x in ddf.columns if x.endswith('_DELETEME')], axis=1)
             ddf = ddf.sort_values([keycol])
 
+            print('ERROR:')
             print(ddf)
             ddf.to_csv('multi_err.csv')
             raise JoinError(
@@ -383,6 +384,7 @@ class Match(gicollections.MutableNamedTuple):
         right = self.xfs[1]
         right_ix = right.prefix + 'ix'
         right_key = right.prefix + 'key'
+#        print('left_ix={}, right_ix={}'.format(left_ix,right_ix))
 
         # Make dummy overrides
         if overrides is None:
@@ -430,16 +432,28 @@ class Match(gicollections.MutableNamedTuple):
         # https://stackoverflow.com/questions/11976503/how-to-keep-index-when-using-pandas-merge
 
         # Join left -- matchdf
-        df = pd.merge(
-            left.df.reset_index(), matchdf, how='left',
+        df = left.df.copy()    # Shallow copy
+        df['index'] = df.index
+        df = pd.merge(df,
+            matchdf, how='left',
             left_index=True, right_on=left_ix,
             suffixes=(None,'_DELETEME')).set_index('index')
 
         # Join (left -- matchdf) -- right
-        df = pd.merge(df.reset_index(),
+        df['index'] = df.index
+        df = pd.merge(df,#.reset_index(),
             right.df if right_cols is None else right.df[right_cols],
             how='left', left_on=right_ix, right_index=True,
             suffixes=(None,'_DELETEME')).set_index('index')
+
+#        df = df.reset_index()
+
+#        try:
+#            print('dddddddxxxxxxxxxxxxxxxxxxxxxxxxxf\n',df[['w21_key', 'cf20_key']])
+#        except:
+#            pass
+
+
 
         # Remove extra columns that accumulated in the join
         drops = {x for x in df.columns if x.endswith('_DELETEME')}
@@ -447,6 +461,7 @@ class Match(gicollections.MutableNamedTuple):
         if (right_cols is not None) and (right_key not in right_cols):
             drops.add(right_key)
         df = df.drop(drops, axis=1)
+
 
         return self.xfs[0].replace(df=df)
 
