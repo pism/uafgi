@@ -210,14 +210,7 @@ class ShapefileWriter(object):
         # Now convert it to a shapefile with OGR    
         self.driver = ogr.GetDriverByName('Esri Shapefile')
         self.ds = self.driver.CreateDataSource(self.fname)
-
-        srs = None if wkt is None else 
-
-#     dst_srs = osr.SpatialReference()
-#     dst_srs.ImportFromWkt(dest_crs_wkt)
-
-
-        self.layer = self.ds.CreateLayer('', srs, ogr_type)
+        self.layer = self.ds.CreateLayer('', osrutil.wkt_to_srs(wkt), ogr_type)
 
         # Add attributes
 #        print('fd ',self.field_defs)

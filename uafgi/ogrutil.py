@@ -74,7 +74,7 @@ def to_shapely_polygon(feature, osr_transform):
             osr_transform = osr.CoordinateTransformation(src_srs, dst_srs)
     """
     geom = feature.GetGeometryRef()
-    geom.Transform(osr_transform)s
+    geom.Transform(osr_transform)
     ring = geom.GetGeometryRef(0)
     npoints = ring.GetPointCount()
     points = list()

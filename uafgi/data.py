@@ -1,5 +1,10 @@
 import os.path
 
+
+UAFGI_ROOT = os.environ['UAFGI_ROOT']
+
+# -------------------------------------------------------
+
 # Root directories
 DATA = 'velocities_data'
 OUTPUTS = 'outputs'
@@ -16,3 +21,5 @@ def bedmachine_local(grid):
     """BedMachine file localized for a NSIDC 0481 (MEASURES) grid"""
     return os.path.join(
         OUTPUTS, 'bedmachine/BedMachineGreenland-2017-09-20_{}.nc'.format(grid))
+
+# -------------------------------------------------------
