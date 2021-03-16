@@ -3,6 +3,10 @@ import os.path
 
 UAFGI_ROOT = os.environ['UAFGI_ROOT']
 
+# Convenience function
+def join(path):
+    return os.path.join(UAFGI_ROOT, path)
+
 # -------------------------------------------------------
 
 # Root directories

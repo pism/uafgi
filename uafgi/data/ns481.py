@@ -1,7 +1,12 @@
 import re,os,datetime,itertools
-from uafgi import giutil,iopfile,gdalutil
-import shapely
+import os,csv
+import numpy as np
 import pandas as pd
+import pyproj
+import shapely
+from uafgi import pdutil,functional
+from uafgi import giutil,iopfile,gdalutil
+import uafgi.data
 
 # Specifics of the data/ directory
 
@@ -138,3 +143,26 @@ def load_grids():
     grids_df = pd.DataFrame({'grid': grid_s, 'poly': poly_s, 'wkt' : wkt_s})
 
     return grids_df
+
+# ===============================================
+
+@functional.memoize
+def read(map_wkt):
+    df = load_grids()
+
+    # Reproject grid dimension polygons
+    crs1 = pyproj.CRS.from_string(map_wkt)
+    def _reproject(x):
+        if x.wkt == map_wkt:
+            # Optimization: reprojection not needed
+            return x.poly
+        else:
+            crs0 = pyproj.CRS.from_string(x.wkt)
+            transform = pyproj.Transformer.from_crs(crs0, crs1)
+            poly1 = shapely.ops.transform(transform.transform, x.poly)
+            return poly1
+
+    df['poly'] = df.apply(_reproject, axis=1)
+    del df['wkt']
+
+    return pdutil.ext_df(df, map_wkt, add_prefix='ns481_', keycols=['grid'])
