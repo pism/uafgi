@@ -186,7 +186,7 @@ def read(fname, wkt1=None, read_shape=True):
 class ShapefileWriter(object):
     """Writes Shapely objects into a shapefile"""
 
-    def __init__(self, fname, shapely_type, field_defs):
+    def __init__(self, fname, shapely_type, field_defs, wkt=None):
         """
         fname:
             Name of file to create
@@ -195,8 +195,10 @@ class ShapefileWriter(object):
             Eg: 'Polygon', 'MultiPolygon'
         field_defs: ((name,type), ...)
             name: Name of attribute field
-            type: ogr.OFTInteger, etc.
+            type: ogr.OFTInteger, ogr.OFTString, etc.
                   https://gdal.org/java/org/gdal/ogr/ogrConstants.html
+        wkt: str
+            WKT of the projection to use for this Shapefile
         """
         self.fname = fname
         self.field_defs = field_defs
@@ -208,7 +210,14 @@ class ShapefileWriter(object):
         # Now convert it to a shapefile with OGR    
         self.driver = ogr.GetDriverByName('Esri Shapefile')
         self.ds = self.driver.CreateDataSource(self.fname)
-        self.layer = self.ds.CreateLayer('', None, ogr_type)
+
+        srs = None if wkt is None else 
+
+#     dst_srs = osr.SpatialReference()
+#     dst_srs.ImportFromWkt(dest_crs_wkt)
+
+
+        self.layer = self.ds.CreateLayer('', srs, ogr_type)
 
         # Add attributes
 #        print('fd ',self.field_defs)

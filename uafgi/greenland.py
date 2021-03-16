@@ -862,11 +862,13 @@ def read_fj(map_wkt):
     df = pd.DataFrame(shputil.read('troughs/shp/fjord_outlines.shp', map_wkt)) \
         .drop(['_shape0', 'id'], axis=1) \
         .rename(columns={'_shape':'poly'})
-    df = df.reset_index().rename(columns={'index':'serial'})    # Add a key column
+
+    # fid = Feature ID, to be used when reading shapefile
+    df = df.reset_index().rename(columns={'index':'fid'})    # Add a key column
 
     return ext_df(df, map_wkt, add_prefix='fj_',
         units={'fjord_poly': 'm'},
-        keycols=['serial'])
+        keycols=['fid'])
 
 @functional.memoize
 def read_cf20(map_wkt):
@@ -1070,18 +1072,15 @@ def read_ns642(map_wkt):
 
 
 def ns642_by_glacier_id(ns642):
-    """Collects rows from original ns642 DataFrame by GlacierID"""
+    """Collects rows from original ns642 DataFrame by GlacierID.
+    Breaks the terminus lines apart into multiple points."""
 
     dfg = ns642.df.groupby(by='ns642_GlacierID')
 
     data = list()
     for name, gr in dfg:
-#        lines = gr['ns642_terminus'].to_list()
         pointss = [list(ls.coords) for ls in gr['ns642_terminus']]
         points = list(itertools.chain.from_iterable(pointss))    # Join to a single list
-#        print('len(pointss) = {}'.format(len(points)))
-#        print(points)
-#        mls = shapely.ops.cascaded_union(lines)
         data.append([name, shapely.geometry.MultiPoint(points)])
         
     df2 = pd.DataFrame(data=data, columns=['ns642_GlacierID', 'ns642_points'])

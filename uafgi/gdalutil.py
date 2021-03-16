@@ -86,6 +86,11 @@ class FileInfo(object):
                 self.times_s = [self.time_units.convert(t_d, self.time_units_s)
                     for t_d in self.times]
 
+    def to_ij(self, x, y):
+        """Converts an (x,y) value to an (i,j) index into raster"""
+        i = int((x-self.x0) / self.dx)
+        j = int((y-self.y0) / self.dy)
+        return i,j
 
 def clone_geometry(drivername, filename, grid_info, nBands, eType):
     """Creates a new dataset, based on the geometry of an existing raster
@@ -105,7 +110,9 @@ def clone_geometry(drivername, filename, grid_info, nBands, eType):
 
     """
 
-    ds = gdal.GetDriverByName(drivername).Create(filename, grid_info.nx, grid_info.ny, nBands, eType)
+    driver = gdal.GetDriverByName(drivername)
+    ds = driver.Create(filename, grid_info.nx, grid_info.ny, nBands, eType)
+    print(ds)
     ds.SetSpatialRef(grid_info.srs)
     ds.SetGeoTransform(grid_info.geotransform)
     return ds
@@ -140,7 +147,8 @@ def rasterize_polygons(polygon_ds, gridfile):
     src_lyr = src_ds.GetLayer()   # Put layer number or name in here
 
     # Create destination raster dataset
-    dst_ds = clone_geometry('netCDF', 'x.nc', fb, 1,  gdal.GDT_Byte)
+#    dst_ds = clone_geometry('netCDF', 'x.nc', fb, 1,  gdal.GDT_Byte)
+    dst_ds = clone_geometry('MEM', '', fb, 1,  gdal.GDT_Byte)
     dst_rb = dst_ds.GetRasterBand(1)
     dst_rb.Fill(0) #initialise raster with zeros
     dst_rb.SetNoDataValue(0)
@@ -154,4 +162,6 @@ def rasterize_polygons(polygon_ds, gridfile):
 
     mask_arr=np.flipud(dst_ds.GetRasterBand(1).ReadAsArray())
     return mask_arr
+
+
 

@@ -20,7 +20,8 @@ def reproject(src_ds, dst_srs, dst_ds):
 
     src_lyr = src_ds.GetLayer()   # Put layer number or name in her
     src_srs = src_lyr.GetSpatialRef()
-    coordTrans = osr.CoordinateTransformation(src_srs, dst_srs)
+    # If no coord system on source, assume it's OK and doesn't need transforming
+    coordTrans = None if src_srs is None else osr.CoordinateTransformation(src_srs, dst_srs)
 
     dst_lyr = dst_ds.CreateLayer(src_lyr.GetName(), srs=dst_srs)
     dst_lyr_def = dst_lyr.GetLayerDefn()
@@ -37,7 +38,8 @@ def reproject(src_ds, dst_srs, dst_ds):
 
         # Reproject the feature
         geom = in_feature.GetGeometryRef()
-        geom.Transform(coordTrans)
+        if coordTrans is not None:
+            geom.Transform(coordTrans)
         dst_feature = ogr.Feature(dst_lyr_def)
         dst_feature.SetGeometry(geom)
 
@@ -72,7 +74,7 @@ def to_shapely_polygon(feature, osr_transform):
             osr_transform = osr.CoordinateTransformation(src_srs, dst_srs)
     """
     geom = feature.GetGeometryRef()
-    geom.Transform(osr_transform)
+    geom.Transform(osr_transform)s
     ring = geom.GetGeometryRef(0)
     npoints = ring.GetPointCount()
     points = list()
@@ -82,3 +84,5 @@ def to_shapely_polygon(feature, osr_transform):
 
     poly = shapely.geometry.Polygon(points)
     return poly
+
+

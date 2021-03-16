@@ -43,7 +43,7 @@ def merge(cdo_merge_operator, inputs, output, tdir, max_merge=30, **kwargs):
     Also appropriate for "small" merges.
 
     cdo_merge_operator:
-        The CDO operator used to merge; Eg: cdo.mergetime
+        The CDO operator used to merge; Eg: cdo.mergetime, cdo.merge
     inputs:
         Names of the input files to merge
     output:
@@ -103,8 +103,9 @@ def compress(ipath, opath):
 # --------------------------------------------------
 
 # --------------------------------------------------------
-def extract_region(ifname, grid_file, vname, ofname):
-    """ifname:
+def extract_region_onevar(ifname, grid_file, vname, ofname):
+    """Extracts a local region from a larger file (eg BedMachine)
+    ifname:
         Name of input file from which to extract the region
     grid_file:
         Name of file containing x and y grid coordinate values
@@ -132,4 +133,24 @@ def extract_region(ifname, grid_file, vname, ofname):
     #print('*********** ', ' '.join(cmd))
     subprocess.run(cmd, check=True)
 # -------------------------------------------------
+def extract_region(ifname, grid_file, vnames, ofname, tdir):
+    """Extracts a local region from a larger file (eg BedMachine)
+    ifname:
+        Name of input file from which to extract the region
+    grid_file:
+        Name of file containing x and y grid coordinate values
+    vnames:
+        List of variables to extract
+    ofname:
+        Name of output files
+    """
+    subs = list()
+    with tdir.subdir() as tdir1:
+        ofname = tdir1.join(vname+'.nc')
+        subs.append(ofname)
+        extract_region_onevar(ifname, grid_file, vname, ofname)
+
+        cdo = Cdo()
+        merge(cdo.merge, subs, ofname, tdir1)
+
 

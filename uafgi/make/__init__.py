@@ -38,6 +38,15 @@ class Makefile(object):
 #        return rule
 
     def add(self, rule):
+        # Don't add if already added
+        all_outputs = True
+        for output in rule.outputs:
+            if output not in rules:
+                all_outputs = False
+            break
+        if all_outputs:
+            return
+
         self.rule_list.append(rule)    # Straight list of all rules
         for output in rule.outputs:
             self.rules[output] = rule
