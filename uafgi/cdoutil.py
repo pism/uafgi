@@ -146,9 +146,10 @@ def extract_region(ifname, grid_file, vnames, ofname, tdir):
     """
     subs = list()
     with tdir.subdir() as tdir1:
-        ofname = tdir1.join(vname+'.nc')
-        subs.append(ofname)
-        extract_region_onevar(ifname, grid_file, vname, ofname)
+        for vname in vnames:
+            ofname = tdir1.join(vname+'.nc')
+            subs.append(ofname)
+            extract_region_onevar(ifname, grid_file, vname, ofname)
 
         cdo = Cdo()
         merge(cdo.merge, subs, ofname, tdir1)

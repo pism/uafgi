@@ -1,11 +1,15 @@
 import os.path
 
 
-UAFGI_ROOT = os.environ['UAFGI_ROOT']
+if 'UAFGI_ROOT' in os.environ:
+    UAFGI_ROOT = os.environ['UAFGI_ROOT']
+else:
+    UAFGI_ROOT = 'velocities_data'
+#UAFGI_ROOT = os.environ['UAFGI_ROOT']
 
 # Convenience function
-def join(path):
-    return os.path.join(UAFGI_ROOT, path)
+def join(*path):
+    return os.path.join(UAFGI_ROOT, *path)
 
 # -------------------------------------------------------
 

@@ -4,8 +4,9 @@ import numpy as np
 import pandas as pd
 import pyproj
 import shapely
+import shapely.ops
 from uafgi import pdutil,functional
-from uafgi import giutil,iopfile,gdalutil
+from uafgi import giutil,iopfile,gdalutil,osrutil
 import uafgi.data
 
 # Specifics of the data/ directory
@@ -123,7 +124,7 @@ def load_grids():
     srs:
         
     """
-    griddir = os.path.join('data', 'measures', 'grids')
+    griddir = uafgi.data.join('measures', 'grids')
     gridRE = re.compile(r'([WE]\d\d\.\d\d[NS])_grid\.nc')
 
     grid_s = list()

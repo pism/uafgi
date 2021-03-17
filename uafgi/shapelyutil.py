@@ -1,5 +1,5 @@
 from osgeo import ogr,osr
-import shapely
+import shapely.geometry
 
 # Convert Shapely type to OGR type
 shapely_to_ogr_type = {

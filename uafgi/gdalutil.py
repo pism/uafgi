@@ -112,14 +112,13 @@ def clone_geometry(drivername, filename, grid_info, nBands, eType):
 
     driver = gdal.GetDriverByName(drivername)
     ds = driver.Create(filename, grid_info.nx, grid_info.ny, nBands, eType)
-    print(ds)
     ds.SetSpatialRef(grid_info.srs)
     ds.SetGeoTransform(grid_info.geotransform)
     return ds
 
 
 
-def rasterize_polygons(polygon_ds, gridfile):
+def rasterize_polygons(polygon_ds, grid_info):
     """Rasterizes all polygons from polygon_ds into a single raster, which
     is returned as a Numpy array.
 
@@ -128,27 +127,23 @@ def rasterize_polygons(polygon_ds, gridfile):
         Can be Shapefile, GeoJSON, etc.
         Eg: poly_ds = gdalutil.open(outlines_shp, driver='ESRI Shapefile')
 
-    gridfile:
-        Name of NetCDF file containing projection, x, y etc. variables of local grid.
-        Fine if it also contains data.
+    grid_info: gdalutil.FileInfo
+        Definition of the grid used for fjord
+        Eg: gdalutil.FileInfo(grid_file)
 
     Returns: np.ndarray
         Mask equals 1 inside the polygons, and 0 outside.
     """
 
-    # Open oroginal JSON file and get geometry specs
-    # polygon_ds = ogr.GetDriverByName('GeoJSON').Open(polygon_file)
-    fb = FileInfo(gridfile)
-
     # Reproject original polygon file to a new (internal) dataset
     # src_ds = ogr.GetDriverByName('ESRI Shapefile').CreateDataSource('x.shp')
     src_ds = ogr.GetDriverByName('Memory').CreateDataSource('')
-    ogrutil.reproject(polygon_ds, fb.srs, src_ds)
+    ogrutil.reproject(polygon_ds, grid_info.srs, src_ds)
     src_lyr = src_ds.GetLayer()   # Put layer number or name in here
 
     # Create destination raster dataset
-#    dst_ds = clone_geometry('netCDF', 'x.nc', fb, 1,  gdal.GDT_Byte)
-    dst_ds = clone_geometry('MEM', '', fb, 1,  gdal.GDT_Byte)
+#    dst_ds = clone_geometry('netCDF', 'x.nc', grid_info, 1,  gdal.GDT_Byte)
+    dst_ds = clone_geometry('MEM', '', grid_info, 1,  gdal.GDT_Byte)
     dst_rb = dst_ds.GetRasterBand(1)
     dst_rb.Fill(0) #initialise raster with zeros
     dst_rb.SetNoDataValue(0)

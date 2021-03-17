@@ -12,14 +12,32 @@ def mod_date(path):
         return None
 
 class Rule(gicollections.MutableNamedTuple):
-    __slots__ = ('action', 'inputs', 'outputs', 'precious')
+    __slots__ = ('action', 'saction', 'inputs', 'outputs', 'precious')
 
     # action() can be called like a function
+
+    def __init__(self, action, inputs, outputs, precious=False):
+        super().__init__(action, str(action), inputs, outputs, precious)
 
     def __call__(self):
         """Useful for one-off calls of a rule, outside of a Makefile"""
         with ioutil.TmpDir() as tdir:
             self.action(tdir)
+
+    def __str__(self):
+        inputs = '\n'.join(['    '+x for x in self.inputs])
+        outputs = '\n'.join(['    '+x for x in self.outputs])
+
+        fmt = """Makefile Rule:
+INPUTS:
+{}
+OUTPUTS:
+{}
+ACTION:
+    {}
+"""
+
+        return fmt.format(inputs, outputs, self.saction)
 
 #Rule = collections.namedtuple('Rule', ('inputs', 'outputs', 'action', 'precious'))
 
@@ -41,7 +59,7 @@ class Makefile(object):
         # Don't add if already added
         all_outputs = True
         for output in rule.outputs:
-            if output not in rules:
+            if output not in self.rules:
                 all_outputs = False
             break
         if all_outputs:

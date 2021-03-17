@@ -10,4 +10,6 @@ with open(sys.argv[1], 'rb') as fin:
 
 # Execute the rule
 with tdir_fn() as tdir:    # See ioutil.TmpDir
+    print('=============================================================')
+    print('Running {}'.format(str(rule)))
     rule.action(tdir)

@@ -9,7 +9,7 @@ from osgeo import ogr,gdal
 import shapefile
 import shapely.geometry
 
-from uafgi import gdalutil
+from uafgi import gdalutil,osrutil,pdutil
 
 shapely2ogr = {
     'Polygon' : ogr.wkbPolygon,
@@ -107,6 +107,38 @@ def read(fname, wkt1=None, read_shape=True):
             yield rec
 
 
+def read_df(fname, wkt1=None, read_shape=True, shape0=None, shape=None, add_prefix=None):
+    """
+    shape0:
+        Name to call the "shape0" columns when all is said and done
+    """
+
+    df = pd.DataFrame(read(fname, wkt1=wkt1, read_shape=read_shape))
+    df = df.reset_index().rename(columns={'index':'fid'})    # Add a key column
+
+    drops = list()
+    renames = dict()
+
+    # ------- Rename or drop shape-related columns
+    if shape0 is None:
+        drops.append('_shape0')
+    else:
+        renames['_shape0'] = shape0
+
+    if shape is None:
+        drops.append('_shape')
+    else:
+        renames['_shape'] = shape
+
+
+
+    df = df.drop(['_shape0', 'id'], axis=1).rename(columns={'_shape': 'loc'})
+    up = pdutil.ext_df(df, wkt1, add_prefix=add_prefix,
+        units={},
+        keycols=['fid'])
+
+    return up
+
 # ---------------------------------------------------------
 # Here's an example of reading a shapefile using ogr
 # def read_fjords(dest_crs_wkt):
@@ -201,8 +233,9 @@ class ShapefileWriter(object):
             WKT of the projection to use for this Shapefile
         """
         self.fname = fname
-        self.field_defs = field_defs
         self.shapely_type = shapely_type
+        self.field_defs = field_defs
+        self.wkt = wkt
 
     def __enter__(self):
         ogr_type = shapely2ogr[self.shapely_type]
@@ -210,7 +243,7 @@ class ShapefileWriter(object):
         # Now convert it to a shapefile with OGR    
         self.driver = ogr.GetDriverByName('Esri Shapefile')
         self.ds = self.driver.CreateDataSource(self.fname)
-        self.layer = self.ds.CreateLayer('', osrutil.wkt_to_srs(wkt), ogr_type)
+        self.layer = self.ds.CreateLayer('', osrutil.wkt_to_srs(self.wkt), ogr_type)
 
         # Add attributes
 #        print('fd ',self.field_defs)

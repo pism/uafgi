@@ -1,6 +1,6 @@
 import os,subprocess
 import netCDF4
-from uafgi import make,ncutil,gdalutil
+from uafgi import make,ncutil,gdalutil,shapelyutil,cdoutil
 from uafgi.make import ncmake
 import re
 from osgeo import ogr
@@ -17,15 +17,15 @@ def fixup_for_pism(ifname, ofname, tdir):
         Temporary directory
     """
 
-    tmp1 = make.ofname(ifname, tdir, '_fixup_pism1.nc')
+    tmp1 = tdir.opath(ifname, '_fixup_pism1.nc')
 
     # Reverse the direction of the Y coordinate
     cmd = ['ncpdq', '-O', '-a', '-y', ifname, tmp1]
     subprocess.run(cmd, check=True)
 
     # Compress
-    os.makedirs(os.path.split(ofname)[0], exit_ok=True)
-    ncutil.compress(tmp1, ofname)
+    os.makedirs(os.path.split(ofname)[0], exist_ok=True)
+    cdoutil.compress(tmp1, ofname)
 
 
 def replace_thk(bedmachine_file0, bedmachine_file1, thk):
@@ -215,7 +215,7 @@ def get_fjord(bmlocal_file, fj_poly):
     fj_ds = shapelyutil.to_datasource(fj_poly)
 
     # Rasterize the approx. trough polygon
-    approx_trough = gdalutil.rasterize_polygons(fj_ds, bmlocal_file)
+    approx_trough = gdalutil.rasterize_polygons(fj_ds, gdalutil.FileInfo(bmlocal_file))
 
     # Read the bed from bedmachine
     with netCDF4.Dataset(bmlocal_file) as nc:
