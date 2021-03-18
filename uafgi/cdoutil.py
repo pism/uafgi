@@ -57,6 +57,7 @@ def merge(cdo_merge_operator, inputs, output, tdir, max_merge=30, **kwargs):
 
     print('Merging {} files into {}'.format(len(inputs), output))
     odir = os.path.split(output)[0]
+    os.makedirs(odir, exist_ok=True)
     _large_merge(cdo_merge_operator, inputs, output, tdir, max_merge=max_merge, **kwargs)
 
 # -------------------------------------------------------------
@@ -125,8 +126,8 @@ def extract_region_onevar(ifname, grid_file, vname, ofname):
 
     cmd = ['gdal_translate',
         '-r', 'average',
-        '-projwin', str(fb.x0), str(fb.y1), str(fb.x1), str(fb.y0),
-        '-tr', str(fb.dx), str(fb.dy),
+        '-projwin', str(fb.x.low), str(fb.y.high), str(fb.x.high), str(fb.y.low),
+        '-tr', str(fb.x.delta), str(fb.y.delta),
         'NETCDF:' + ifname + ':'+vname,
         ofname]
 

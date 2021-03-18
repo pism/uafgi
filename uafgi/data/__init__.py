@@ -10,11 +10,12 @@ else:
 # Convenience function
 def join(*path):
     return os.path.join(UAFGI_ROOT, *path)
-
+def join_outputs(*path):
+    return os.path.join(OUTPUTS, *path)
 # -------------------------------------------------------
 
 # Root directories
-DATA = 'velocities_data'
+DATA = UAFGI_ROOT
 OUTPUTS = 'outputs'
 
 # Core files

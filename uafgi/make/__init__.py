@@ -63,7 +63,7 @@ class Makefile(object):
                 all_outputs = False
             break
         if all_outputs:
-            return
+            return rule.outputs
 
         self.rule_list.append(rule)    # Straight list of all rules
         for output in rule.outputs:
@@ -126,8 +126,9 @@ make -f {} "$@"'''.format(os.getcwd(), env_sh, Makefile))
         with open(env_sh, 'w') as out:
             subprocess.run(cmd, stdout=out)
 
+        dtargets = dict((x,None) for x in targets)    # uniqify targets list
         with open(Makefile, 'w') as mout:
-            mout.write('all : {}\n\n'.format(' '.join(targets)))
+            mout.write('all : {}\n\n'.format(' '.join(dtargets.keys())))
 
             odir = os.path.realpath(odir)
             ithunk = 0

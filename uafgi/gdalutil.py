@@ -1,3 +1,4 @@
+import collections
 import numpy as np
 import netCDF4, cf_units
 from uafgi import functional,ogrutil,cfutil,ncutil
@@ -17,6 +18,40 @@ def open(fname, driver=None, **kwargs):
         raise FileNotFoundException(fname)
     return ds
 
+Axis = collections.namedtuple('Axis', (
+    'centers',    # Center of each pixel on the axis
+    'n',          # Number of pixels in centers
+    'low', 'high', # Range of the axis to the EDGES of the pixels
+    'delta',     # Size of pixels
+    'low_raw', 'high_raw', 'delta_raw'
+))
+
+def make_axis(centers):
+    if centers[1] > centers[0]:
+        # Positive axis
+        dx = centers[1]-centers[0]
+        half_dx = .5 * dx
+        return Axis(
+            centers, len(centers),
+            centers[0] - half_dx,
+            centers[-1] + half_dx,
+            dx,
+            centers[0] - half_dx,
+            centers[-1] + half_dx,
+            dx)
+
+    else:
+        # Negative axis; but dx should still be positive
+        dx = centers[0]-centers[1]
+        half_dx = .5 * dx
+        return Axis(
+            centers, len(centers),
+            centers[-1] - half_dx,
+            centers[0] + half_dx,
+            dx,
+            centers[0] - half_dx,
+            centers[-1] + half_dx,
+            -dx)
 
 @functional.memoize
 class FileInfo(object):
@@ -44,19 +79,8 @@ class FileInfo(object):
         with ncutil.open(grid_file) as nc:
             # Info on spatial bounds
             if 'x' in nc.variables:
-                self.xx = nc.variables['x'][:]
-                self.nx = len(self.xx)
-                self.dx = self.xx[1]-self.xx[0]
-                half_dx = .5 * self.dx
-                self.x0 = round(self.xx[0] - half_dx)
-                self.x1 = round(self.xx[-1] + half_dx)
-
-                self.yy = nc.variables['y'][:]
-                self.ny = len(self.yy)
-                self.dy = self.yy[1]-self.yy[0]
-                half_dy = .5 * self.dy
-                self.y0 = round(self.yy[0] - half_dy)
-                self.y1 = round(self.yy[-1] + half_dy)
+                self.x = make_axis(nc.variables['x'][:])
+                self.y = make_axis(nc.variables['y'][:])
 
                 # Info on the coordinate reference system (CRS)
                 if 'polar_stereographic' in nc.variables:
@@ -88,8 +112,8 @@ class FileInfo(object):
 
     def to_ij(self, x, y):
         """Converts an (x,y) value to an (i,j) index into raster"""
-        i = int((x-self.x0) / self.dx)
-        j = int((y-self.y0) / self.dy)
+        i = int((x-self.x.low_raw) / self.x.delta_raw)
+        j = int((y-self.y.low_raw) / self.x.delta_raw)
         return i,j
 
 def clone_geometry(drivername, filename, grid_info, nBands, eType):

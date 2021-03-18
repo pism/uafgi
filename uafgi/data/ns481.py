@@ -138,7 +138,9 @@ def load_grids():
         # Create a Shapely Polygon for the rectangle bounding box
         fi = gdalutil.FileInfo(os.path.join(griddir,leaf))
         grid_s.append(match.group(1))
-        poly_s.append(shapely.geometry.Polygon([(fi.x0,fi.y0), (fi.x1,fi.y0), (fi.x1,fi.y1), (fi.x0,fi.y1)]))
+        poly_s.append(shapely.geometry.Polygon([
+            (fi.x.low,fi.y.low), (fi.x.high,fi.y.low),
+            (fi.x.high,fi.y.high), (fi.x.low,fi.y.high)]))
         wkt_s.append(fi.srs.ExportToWkt())
 
     grids_df = pd.DataFrame({'grid': grid_s, 'poly': poly_s, 'wkt' : wkt_s})
