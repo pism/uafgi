@@ -92,6 +92,22 @@ class FileInfo(object):
                         sgeotransform = ncv.GeoTransform
                         self.geotransform = tuple(float(x) for x in sgeotransform.split(' ') if len(x) > 0)
 
+                        # The GeoTransform is a tuple of 6 values,
+                        # which relate raster indices into
+                        # coordinates.
+                        # Xgeo = GT[0] + Xpixel*GT[1] + Yline*GT[2]
+                        # Ygeo = GT[3] + Xpixel*GT[4] + Yline*GT[5]
+                        
+                        GT = self.geotransform
+                        a = GT[1]
+                        b = GT[2]
+                        c = GT[4]
+                        d = GT[5]
+                        det = a * d - b * c
+                        bydet = 1./det
+                        # Inverse matrix: (a,b,c,d)
+                        self.geoinv = (d*bydet, -b*bydet, -c*bydet, a*bydet)
+
             # Info on time units
             if 'time' in nc.variables:
                 nctime = nc.variables['time']
@@ -110,11 +126,25 @@ class FileInfo(object):
                 self.times_s = [self.time_units.convert(t_d, self.time_units_s)
                     for t_d in self.times]
 
+    def to_xy(self, i, j):
+        """Converts an (i,j) pixel address to an (x,y) geographic value"""
+        GT = self.geotransform
+        Xgeo = GT[0] + i*GT[1] + j*GT[2]
+        Ygeo = GT[3] + j*GT[4] + j*GT[5]
+        return Xgeo,Ygeo
+
+
     def to_ij(self, x, y):
-        """Converts an (x,y) value to an (i,j) index into raster"""
-        i = int((x-self.x.low_raw) / self.x.delta_raw)
-        j = int((y-self.y.low_raw) / self.x.delta_raw)
-        return i,j
+        """Converts an (x,y) value to an (i,j) index into raster
+        NOTE: Similar to geoio.GeoImage.proj_to_raster()"""
+
+        # https://stackoverflow.com/questions/40464969/why-does-gdal-grid-turn-image-upside-down
+        xx = (x - self.geotransform[0])
+        yy = (y - self.geotransform[3])
+        ir = self.geoinv[0]*xx + self.geoinv[1]*yy
+        jr = self.geoinv[2]*xx + self.geoinv[3]*yy
+
+        return int(ir+.5), int(jr+.5)
 
 def clone_geometry(drivername, filename, grid_info, nBands, eType):
     """Creates a new dataset, based on the geometry of an existing raster
@@ -135,7 +165,7 @@ def clone_geometry(drivername, filename, grid_info, nBands, eType):
     """
 
     driver = gdal.GetDriverByName(drivername)
-    ds = driver.Create(filename, grid_info.nx, grid_info.ny, nBands, eType)
+    ds = driver.Create(filename, grid_info.x.n, grid_info.y.n, nBands, eType)
     ds.SetSpatialRef(grid_info.srs)
     ds.SetGeoTransform(grid_info.geotransform)
     return ds
@@ -179,7 +209,7 @@ def rasterize_polygons(polygon_ds, grid_info):
 
     dst_ds.FlushCache()
 
-    mask_arr=np.flipud(dst_ds.GetRasterBand(1).ReadAsArray())
+    mask_arr = dst_ds.GetRasterBand(1).ReadAsArray()
     return mask_arr
 
 
