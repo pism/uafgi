@@ -70,11 +70,18 @@ def get_fjord(bmlocal_file, fj_poly):
     fj_ds = shapelyutil.to_datasource(fj_poly)
 
     # Rasterize the approx. trough polygon
-    approx_trough = gdalutil.rasterize_polygons(fj_ds, gdalutil.FileInfo(bmlocal_file))
+    fb = gdalutil.FileInfo(bmlocal_file)
+    approx_trough = gdalutil.rasterize_polygons(fj_ds, fb)
 
     # Read the bed from bedmachine
     with netCDF4.Dataset(bmlocal_file) as nc:
         bed = nc.variables['bed'][:]
+        yy = nc.variables['y'][:]
+    # Conform to GDAL conventions.
+    # NOTE: It would be better to just use GDAL to read this array.
+    if yy[1] - yy[0] > 0:
+        bed = np.flipud(bed)
+
 
     # Intersect the appxorimate trough with the below-sea-level areas.
     # This gives the mask of
