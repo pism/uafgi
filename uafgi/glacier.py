@@ -25,8 +25,12 @@ def upstream_fjord(fjord, grid_info, upstream_loc, terminus):
     terminus: shapely.geometry.LineString
         The terminus on which to split
 
-    Returns: np.array(bool)
-        The portion of the fjord upstream of the terminus
+    Returns: np.array(int)
+        0 = Unused
+        1 = lower fjord
+        2 = glacier terminus
+        4 = upper fjord
+        5 = the fill seed point (in the upper fjord)
     
     """
 
@@ -50,7 +54,7 @@ def upstream_fjord(fjord, grid_info, upstream_loc, terminus):
         [0,1,0]
     ])
 
-    # Find the upper part of the fjord!
-    upper = skimage.segmentation.flood(fj, seed, selem=selem)
-    return upper
+    fj = skimage.segmentation.flood_fill(fj, (seed[1],seed[0]), 4, selem=selem)
+    fj[seed[1],seed[0]] = 5
+    return fj
 
