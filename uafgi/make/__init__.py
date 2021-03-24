@@ -103,7 +103,7 @@ class Makefile(object):
         cmd = ['sh', '-c', 'export', '-p']
         env_sh = os.path.join(odir, 'env.sh')
         Makefile = os.path.join(odir, 'Makefile')
-        domake = os.path.join(odir, 'domake')
+        domake = os.path.join(odir, 'make')
 
         # Extra step if Makefile is to run from within SLURM
         pythone = 'srun pythone' if slurm else 'pythone'
