@@ -10,8 +10,17 @@ from uafgi.pism import calving0
 import netCDF4
 import PISM
 
+blackout_types = {
+    ('shapely.geometry.multipoint', 'MultiPoint'),
+    ('shapely.geometry.polygon', 'Polygon'),
+#    ('shapely.geometry.point', 'Point'),
+    ('shapely.geometry.linestring', 'LineString'),
+    ('numpy', 'ndarray'),
+}
 
-def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, dry_run=False, **pism_kwargs0):
+
+
+def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, dry_run=False, row=None, **pism_kwargs0):
     """Does a single PISM run
     ns481_grid:
         Name of the grid on which this runs (as per NSIDC-0481 dataset)
@@ -26,6 +35,8 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, 
         (for use in make rules)
     dry_run:
         If true, just return (inputs, outputs)
+    row: pd.Series
+        Row of a Pandas Dataframe, to write to output file
     pism_kwargs0:
         kwargs given to PISM run
     """
@@ -86,9 +97,9 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, 
     print('     ---> {}'.format(output_file3))
 
     # Prepare to store the output file
-    odir = os.path.split(output_file)[0]
-    if len(odir) > 0:
-        os.makedirs(odir, exist_ok=True)
+#    odir = os.path.split(output_file)[0]
+#    if len(odir) > 0:
+#        os.makedirs(odir, exist_ok=True)
 
     try:
 
@@ -157,6 +168,12 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, 
         nc.year = year
         for key,val in pism_kwargs0.items():
             nc.setncattr(key,val)
+
+        # Add info from Pandas Series
+        for col,val in row.items():
+            mt = (type(val).__module__, type(val).__name__)
+            if mt not in blackout_types:
+                nc.setncattr(col,val)
 
     # ------------------- Create final output file
     os.makedirs(os.path.split(output_file)[0], exist_ok=True)
