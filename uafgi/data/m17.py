@@ -1,13 +1,14 @@
 import pandas as pd
 import uafgi.data
 from uafgi import pdutil,functional
+import uafgi.data.greenland
 
 @functional.memoize
 def read(map_wkt):
     # Morlighem et al, 2017
     # BedMachine v3 paper
 
-    colnames,units = sep_colnames(
+    colnames,units = uafgi.data.greenland.sep_colnames(
         ['id', 'name', 'lat', 'lon', ('speed', 'm a-1'), ('drainage', 'km^2'),
         'mc', 'bathy',
         ('ice_front_depth_b2013','m'), ('ice_front_depth_rtopo2','m'), ('ice_front_depth','m'),
