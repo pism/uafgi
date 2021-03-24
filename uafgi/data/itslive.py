@@ -1,3 +1,4 @@
+import numpy as np
 from uafgi import ioutil,make,cdoutil
 from cdo import Cdo
 import os
@@ -43,8 +44,22 @@ def process_year(ifname, year, grid_file, ofname, tdir):
         # Fix units
         with netCDF4.Dataset(tmp_v2, 'a') as nc:
             ncv = nc.variables[vname]
+
+            # Fix units
             if ncv.units == 'm/y':
                 ncv.units = 'm year-1'
+
+            # Eliminate missing values
+            # See PISM:
+            # commit 60739ae417da1c4b106d9a4d9ab22a165194bdb6
+            # Author: Constantine Khrulev <ckhroulev@alaska.edu>
+            # Date:   Wed Oct 14 11:21:18 2020 -0800
+            #     Stop PISM if a variable in an input file has missing values    
+            #     We check if some values of a variable match the _FillValue attribute.
+            val = ncv[:].data    # NetCDF reads a masked array
+            print('FillValueX ',ncv._FillValue, np.sum(np.sum(val==ncv._FillValue)))
+            val[val==ncv._FillValue] = 0
+            ncv[:] = val
 
         # Add to files to merge
         merge_files.append(tmp_v2)

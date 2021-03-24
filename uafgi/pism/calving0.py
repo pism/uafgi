@@ -81,7 +81,8 @@ class FrontEvolution(object):
         #
         # It has a dummy vertical dimension with as few vertical
         # levels as possible, it only has 2 levels.
-        self.ice_enthalpy = PISM.IceModelVec3(grid, "enthalpy", PISM.WITH_GHOSTS, 2)
+#        self.ice_enthalpy = PISM.IceModelVec3(grid, "enthalpy", PISM.WITH_GHOSTS, 2)
+        self.ice_enthalpy = PISM.IceModelVec3(grid, "enthalpy", PISM.WITH_GHOSTS, grid.z(), 2)
         self.ice_enthalpy.set(0.0)
 
         # The GeometryEvolution class requires both the "advective"
@@ -109,7 +110,8 @@ class FrontEvolution(object):
 
         self.iceberg_remover = PISM.IcebergRemover(grid)
 
-        self.iceberg_remover.init()
+        # This was a nop, then removed in  Commit 20300752
+        # self.iceberg_remover.init()
 
     def set_bc_mask(self, velocity, bc_mask):
         """Set the BC mask to prevent ice thickness changes in areas where ice
