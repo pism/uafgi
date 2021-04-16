@@ -53,7 +53,9 @@ def make_axis(centers):
             centers[-1] + half_dx,
             -dx)
 
-@functional.memoize
+# @functional.memoize
+# Do not memoize this.  Adding memoization produces the error when pickling:
+#    Can't pickle <class 'uafgi.gdalutil.FileInfo'>: it's not the same object as uafgi.gdalutil.FileInfo
 class FileInfo(object):
     """Reads spatial extents from GDAL raster file.
     Currently only works for NetCDF raster files.
@@ -79,14 +81,18 @@ class FileInfo(object):
         with ncutil.open(grid_file) as nc:
             # Info on spatial bounds
             if 'x' in nc.variables:
-                self.x = make_axis(nc.variables['x'][:])
-                self.y = make_axis(nc.variables['y'][:])
+                xx = nc.variables['x'][:].data
+                self.dx = abs(xx[1]-xx[0])
+                self.x = make_axis(xx)
+
+                yy = nc.variables['y'][:].data
+                self.dy = abs(yy[1]-yy[0])
+                self.y = make_axis(yy)
 
                 # Info on the coordinate reference system (CRS)
                 if 'polar_stereographic' in nc.variables:
                     ncv = nc.variables['polar_stereographic']
-                    self.srs = osr.SpatialReference(wkt=ncv.spatial_ref)
-                    # Use srs.ExportToWkt() to get back to Wkt string
+                    self.wkt = ncv.spatial_ref
 
                     if hasattr(ncv, 'GeoTransform'):
                         sgeotransform = ncv.GeoTransform
@@ -125,6 +131,12 @@ class FileInfo(object):
                     self.time_units, 'seconds')
                 self.times_s = [self.time_units.convert(t_d, self.time_units_s)
                     for t_d in self.times]
+
+    @property
+    def srs(self):
+        # Use srs.ExportToWkt() to get back to Wkt string
+        return osr.SpatialReference(wkt=self.wkt)
+
 
     def to_xy(self, i, j):
         """Converts an (i,j) pixel address to an (x,y) geographic value"""
