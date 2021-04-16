@@ -1,6 +1,7 @@
 import re
 import cf_units
 from uafgi import ncutil
+import datetime
 
 def get_crs(cf_file):
     """Returns a PROJ CRS obtained from a CF-compliant NetCDF file.
@@ -30,4 +31,21 @@ def replace_reftime_unit(unit, relname='seconds'):
 
     match = cfdateRE.match(unit.origin)    # string representation of unit
     return cf_units.Unit(relname+match.group(2), unit.calendar)
+
+
+def read_time(nc, vname):
+    """Reads a CF-compliant time variable and converts to Python datetime objects.
+    nc: netCDF4.Dataset
+        An open NetCDF file
+    vname: str
+        Name of time variable to read
+    Returns: [datetime, ...]
+        The times, converted to Python format.
+    """
+    nctime = nc.variables[vname]
+    return [
+        datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
+        for dt in
+        cf_units.Unit(nctime.units, calendar=nctime.calendar). \
+            num2date(nctime[:])]
 
