@@ -451,3 +451,10 @@ def match_point_poly(left, left_point, right, right_poly, left_cols=None, right_
     return Match((left,right), (left_point, right_poly), matchdf)
 
 # ====================================================================
+def merge_nodups(*args, **kwargs):
+	"""An extension of pandas.merge that eliminates duplicates of columns with the same name.
+	(It assumes columns with the same name are the same)."""
+    df = pd.merge(*args, suffixes=(None,'_DELETEME'), **kwargs)
+    drops = [x for x in df.columns if x.endswith('_DELETEME')]
+    df = df.drop(drops, axis=1)
+    return df
