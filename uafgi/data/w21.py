@@ -4,6 +4,20 @@ from uafgi import pdutil,functional
 import os,csv
 import numpy as np
 
+category_descr = {
+    'DW' : 'Terminating in deep warm water (DW) with the detected presence of AW (warm Atlantic waters)',
+    'CR' : 'Calving Ridge, independent of the presence of AW (warm Atlantic waters)',
+    'SC' : 'stand in shallow cold (SC) (<100-m depth) fjords with polar water',
+    'FE' : 'Glacier with long (>10km) floating extension',
+    'NC' : 'Non-categorized due to lack of bathymetry and ocean temperature data'
+}
+
+
+#To simplify the analysis of the relationship between glacier undercutting and the onset and progression of glacier retreat, we group the 226 glaciers into six categories. Four categories are based on the fjord/ice geometry and the detected presence of AW, pertaining to 135 glaciers that have sufficient measurements to characterize bathymetry and water properties: (i) 74 glaciers terminating in deep warm water (DW) with the detected presence of AW; 
+
+#(ii) 27 glaciers that break into icebergs on shallow ridges [calving ridges (CR)], independent of the presence of AW; (iii) 24 glaciers that stand in shallow cold (SC) (<100-m depth) fjords with polar water; and (iv) 10 glaciers with long (>10 km) floating extensions (FE). We partition the 91 remaining glaciers into two additional categories: (v) four glaciers already in an SR in 1992–1997 and (vi) 87 noncategorized (NC) glaciers due to a lack of bathymetry and ocean temperature data. The glacier distribution follows geography and precipitation regime (Fig. 3). DW glaciers dominate in NW, CW, and SE, where precipitation, glacier speed, and rates of mass turnover are high. SC glaciers are common in SW and CE, where mass turnover is lower. FE glaciers are in the cold, dry N and NE, except for Jakobshavn Isbræ and Alison. NC glaciers prevail in SW and CE where measurements of ice thickness and bathymetry are few, but the glaciers are thinner and the fjords are shallower than on average.
+
+
 @functional.memoize
 def read(map_wkt):
     # w21: Reads the dataset:
