@@ -16,6 +16,11 @@ blackout_types = {
 #    ('shapely.geometry.point', 'Point'),
     ('shapely.geometry.linestring', 'LineString'),
     ('numpy', 'ndarray'),
+    ('uafgi.gdalutil', 'FileInfo'),
+}
+
+blackout_names = {
+    'ns642_years', 'ns642_termini'
 }
 
 
@@ -86,8 +91,8 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, 
 
     dt0 = datetime.datetime(year,1,1)
     t0_s = fb.time_units_s.date2num(dt0)
-    #dt1 = datetime.datetime(year+1,1,1)
     dt1 = datetime.datetime(year,4,1)
+#    dt1 = datetime.datetime(year,1,10)
     t1_s = fb.time_units_s.date2num(dt1)
 
     # ---------------------------------------------------------------
@@ -172,8 +177,12 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, 
         # Add info from Pandas Series
         for col,val in row.items():
             mt = (type(val).__module__, type(val).__name__)
-            if mt not in blackout_types:
-                nc.setncattr(col,val)
+            if mt not in blackout_types and col not in blackout_names:
+                try:
+                    nc.setncattr(col,val)
+                except:
+                    print('Error pickling column {} = {}'.format(col,val))
+                    raise
 
     # ------------------- Create final output file
     os.makedirs(os.path.split(output_file)[0], exist_ok=True)
