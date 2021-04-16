@@ -102,6 +102,10 @@ class FrontEvolution(object):
         self.retreat_rate = PISM.IceModelVec2S(grid, "total_retreat_rate", PISM.WITHOUT_GHOSTS)
         self.retreat_rate.set_attrs("output", "rate of ice front retreat", "m / s", "m / day", "", 0)
 
+        # Storage for eigenvalues used to compute von Mises stress(sigma)
+        # https://github.com/pism/pism/blob/7d463673b0d1a89b0a43af1185bbd31277f40251/src/stressbalance/StressBalance_diagnostics.cc#L816
+        self.strain_rates = PISM.IceModelVec2(grid, "strain_rates", PISM.WITHOUT_GHOSTS, 1, 2)
+
         self.calving_model = self.create_calving_model(grid, self.kwargs['ice_softness'], self.kwargs['sigma_max'])
 
         self.retreat_model = PISM.FrontRetreat(grid)
@@ -154,11 +158,17 @@ class FrontEvolution(object):
         # Cap ice speed at ~15.8 km/year (5e-4 m/s).
         self.cap_ice_speed(self.ice_velocity, valid_max=self.kwargs['max_ice_speed'])
 
+        PISM.compute_2D_principal_strain_rates(
+            self.ice_velocity, geometry.cell_type,
+            self.strain_rates)    # OUT
+
         if output:
             PISM.append_time(output, self.config, t0)
 
+            geometry.ice_area_specific_volume.write(output)
             geometry.ice_thickness.write(output)
             geometry.cell_type.write(output)
+            self.strain_rates.write(output)
             self.retreat_rate.write(output)
             self.advance_model.flux_divergence().write(output)
 
