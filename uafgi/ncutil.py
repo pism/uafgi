@@ -269,31 +269,43 @@ def open(file, *args):
         with netCDF4.Dataset(file, *args) as nc:
             yield nc
 # ====================================================
-NSGroup = collections.namedtuple('NSGroup', ('name', 'groups', 'dims', 'vars', 'attrs'))
-NSDim = collections.namedtuple('NSDim', ('name', 'len'))
-NSVar = collections.namedtuple('NSVar', ('name', 'dims', 'attrs'))
-NSAttr = collections.namedtuple('NSAttr', ('name', 'val'))
+NSGroup = collections.namedtuple('NSGroup', ('groups', 'dims', 'vars', 'attrs'))
+NSVar = collections.namedtuple('NSVar', ('dtype', 'dims', 'attrs'))
 
-def group_schema(name, nc):
-    return NSGroup(name,
-        [group_schema(key,val) for key,val in nc.groups],
-        [dim_schema(name, ncdim) for name,ncdim in nc.dimensions.items()],
-        [var_schema(key,val) for key,val in nc.variables.items()],
-        [attr_schema(nc, name) for name in nc.ncattrs()])
-
-def dim_schema(name, ncdim):
-    return NSDim(name, None if ncdim.isunlimited() else len(ncdim))
-
-def var_schema(name, ncvar):
+def _var_schema(ncvar):
     # ncvar.dimensions is just a list of dimension NAMES
-    return NSVar(name, ncvar.dimensions,
-        [attr_schema(ncvar,name) for name in ncvar.ncattrs()])
+    return NSVar(ncvar.dtype, ncvar.dimensions,
+        {name: ncvar.getncattr(name) for name in ncvar.ncattrs()})
 
-def attr_schema(nc, name):
-    return NSAttr(name, nc.getncattr(name))
+def get_schema(nc):
+    """Returns the schema for a full NetCDF file (or a group therein)"""
+    return NSGroup(
+        {name: get_schema(val) for name,val in nc.groups.items()},
+        {name: (None if ncdim.isunlimited() else len(ncdim)) \
+            for name,ncdim in nc.dimensions.items()},
+        {name: _var_schema(ncvar) for name,ncvar in nc.variables.items()},
+        {name: nc.getncattr(name) for name in nc.ncattrs()})
 
-def nc_schema(nc):
-    """Top-level schema method.  Obtains schema structure for entire NetCDF file"""
-    return group_schema(None, nc)
+# ==============================================================
 
+def create_schema(nc, ncs):
+    """Creates the structures listed in a schema, into a NetCDF file."""
 
+    # Create dimensions
+    for name,val in ncs.dims.items():
+        nc.createDimension(name, val)
+
+    # Create variables
+    for name,nsv in ncs.vars.items():
+        ncv = nc.createVariable(name, nsv.dtype, nsv.dims)
+        for key,val in nsv.attrs.items():
+            ncv.setncattr(key, val)
+
+    # Create attributes
+    for key,val in ncs.attrs.items():
+        nc.setncattr(key, val)
+
+    # Create groups
+    for key,nsg in ncs.groups.items():
+        ncg = nc.createGroup(key)
+        create_schema(ncg, nsg)
