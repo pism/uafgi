@@ -21,6 +21,7 @@ import os
 import shutil
 import subprocess
 import contextlib
+import collections
 
 # Copy a netCDF file (so we can add more stuff to it)
 class copy_nc(object):
@@ -267,3 +268,32 @@ def open(file, *args):
     else:
         with netCDF4.Dataset(file, *args) as nc:
             yield nc
+# ====================================================
+NSGroup = collections.namedtuple('NSGroup', ('name', 'groups', 'dims', 'vars', 'attrs'))
+NSDim = collections.namedtuple('NSDim', ('name', 'len'))
+NSVar = collections.namedtuple('NSVar', ('name', 'dims', 'attrs'))
+NSAttr = collections.namedtuple('NSAttr', ('name', 'val'))
+
+def group_schema(name, nc):
+    return NSGroup(name,
+        [group_schema(key,val) for key,val in nc.groups],
+        [dim_schema(name, ncdim) for name,ncdim in nc.dimensions.items()],
+        [var_schema(key,val) for key,val in nc.variables.items()],
+        [attr_schema(nc, name) for name in nc.ncattrs()])
+
+def dim_schema(name, ncdim):
+    return NSDim(name, None if ncdim.isunlimited() else len(ncdim))
+
+def var_schema(name, ncvar):
+    # ncvar.dimensions is just a list of dimension NAMES
+    return NSVar(name, ncvar.dimensions,
+        [attr_schema(ncvar,name) for name in ncvar.ncattrs()])
+
+def attr_schema(nc, name):
+    return NSAttr(name, nc.getncattr(name))
+
+def nc_schema(nc):
+    """Top-level schema method.  Obtains schema structure for entire NetCDF file"""
+    return group_schema(None, nc)
+
+
