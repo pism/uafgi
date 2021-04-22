@@ -21,7 +21,7 @@ import os
 import shutil
 import subprocess
 import contextlib
-import collections
+from uafgi import gicollections
 
 # Copy a netCDF file (so we can add more stuff to it)
 class copy_nc(object):
@@ -269,43 +269,66 @@ def open(file, *args):
         with netCDF4.Dataset(file, *args) as nc:
             yield nc
 # ====================================================
-NSGroup = collections.namedtuple('NSGroup', ('groups', 'dims', 'vars', 'attrs'))
-NSVar = collections.namedtuple('NSVar', ('dtype', 'dims', 'attrs'))
+class NSVar(gicollections.MutableNamedTuple):
+    __slots__ = ('dtype', 'dims', 'attrs')
 
 def _var_schema(ncvar):
     # ncvar.dimensions is just a list of dimension NAMES
     return NSVar(ncvar.dtype, ncvar.dimensions,
         {name: ncvar.getncattr(name) for name in ncvar.ncattrs()})
 
-def get_schema(nc):
-    """Returns the schema for a full NetCDF file (or a group therein)"""
-    return NSGroup(
-        {name: get_schema(val) for name,val in nc.groups.items()},
-        {name: (None if ncdim.isunlimited() else len(ncdim)) \
-            for name,ncdim in nc.dimensions.items()},
-        {name: _var_schema(ncvar) for name,ncvar in nc.variables.items()},
-        {name: nc.getncattr(name) for name in nc.ncattrs()})
+class Schema:
+    """Represents the schema of a NetCDF file (or a group in a NetCDF file).
+    Can be used for custom copies of NetCDF file as follows:
 
-# ==============================================================
+        with netCDF4.Dataset('x.nc') as ncin:
+            ncs = ncutil.Schema(ncin)
+            with netCDF4.Dataset('y.nc', 'w') as ncout:
+               ...modify schema here to control vars created...
+                ncs.create(ncout, var_kwargs={'zlib': True})
+               ...modify schema here to control vars copied...
+                ncs.copy(ncin, ncout)
+    """
 
-def create_schema(nc, ncs):
-    """Creates the structures listed in a schema, into a NetCDF file."""
+    def __init__(self, ncin):
+        """Returns the schema for a full NetCDF file (or a group therein)"""
+        self.dims = {name: (None if ncdim.isunlimited() else len(ncdim)) \
+            for name,ncdim in ncin.dimensions.items()}
+        self.vars = {name: _var_schema(ncvar) for name,ncvar in ncin.variables.items()}
+        self.attrs = {name: ncin.getncattr(name) for name in ncin.ncattrs()}
+        self.groups = {name: Schema(val) for name,val in ncin.groups.items()}
 
-    # Create dimensions
-    for name,val in ncs.dims.items():
-        nc.createDimension(name, val)
+    def create(self, ncout, var_kwargs=dict(zlib=True)):
+        """Creates this schema in a new NetCDF file"""
 
-    # Create variables
-    for name,nsv in ncs.vars.items():
-        ncv = nc.createVariable(name, nsv.dtype, nsv.dims)
-        for key,val in nsv.attrs.items():
-            ncv.setncattr(key, val)
+        # Create dimensions
+        for name,val in self.dims.items():
+            ncout.createDimension(name, val)
 
-    # Create attributes
-    for key,val in ncs.attrs.items():
-        nc.setncattr(key, val)
+        # Create variables
+        for name,nsv in self.vars.items():
+            ncv = ncout.createVariable(name, nsv.dtype, nsv.dims, **var_kwargs)
+            for key,val in nsv.attrs.items():
+                ncv.setncattr(key, val)
 
-    # Create groups
-    for key,nsg in ncs.groups.items():
-        ncg = nc.createGroup(key)
-        create_schema(ncg, nsg)
+        # Create attributes
+        for key,val in self.attrs.items():
+            ncout.setncattr(key, val)
+
+        # Create groups
+        for key,nsg in self.groups.items():
+            ncg = ncout.createGroup(key)
+            nsg.create(ncg, var_kwargs=var_kwargs)
+
+    def copy(self, ncin, ncout):
+        """Copies this schema from ncin to ncout.
+        create() must have already been run."""
+
+        for vname in self.vars.keys():
+            ncout.variables[vname][:] = ncin.variables[vname][:]
+
+        # Copy groups
+        for name,schema1 in self.groups.items():
+            ncin1 = ncin.groups[name]
+            ncout1 = ncout.groups[name]
+            schema1.copy(ncin1, ncout1)
