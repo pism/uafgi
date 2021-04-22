@@ -157,6 +157,16 @@ def von_mises_stress(u_surface, v_surface, thk, dx, dy):
     L2 = qf_A - qf_B   # Smaller eigenvalue
 
 
+    return von_mises_stress_eig(L1, L2)
+
+def von_mises_stress_eig(L1, L2):
+    """Calculate the von Mises stress,given the eigenvalues L1 and L2.
+
+    * L1 and L2 are computed by PISM as strain_rates[0] and
+      strain_rates[1] (see calving0.py).
+    * They may also be computed, less well, by von_mises_stress() (above).
+    """
+
     # Follows Morlighem et al 2016: Modeling of Store
     # Gletscher's calving dynamics, West Greenland, in
     # response to ocean thermal forcing
@@ -210,4 +220,3 @@ def von_mises_stress(u_surface, v_surface, thk, dx, dy):
         np.power(e2, (1./(2*glen_exponent)))    # Eq 7
 
     return tensile_von_Mises_stress
-
