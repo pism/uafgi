@@ -132,6 +132,18 @@ class FrontEvolution(object):
                 if not speed < huge_value:
                     bc_mask[i, j] = 1
 
+    def write_output(self, geometry, output, time):
+        """Factor out writing of outputs; for consistency."""
+
+        PISM.append_time(output, self.config, time)
+
+        geometry.ice_area_specific_volume.write(output)
+        geometry.ice_thickness.write(output)
+        geometry.cell_type.write(output)
+        self.strain_rates.write(output)
+        self.retreat_rate.write(output)
+        self.advance_model.flux_divergence().write(output)
+
     def __call__(self, geometry, ice_velocity, t0,t1, output=None):
         """Perform a number of steps of the mass continuity equation and the
         calving parameterization to evolve ice geometry.
@@ -163,14 +175,7 @@ class FrontEvolution(object):
             self.strain_rates)    # OUT
 
         if output:
-            PISM.append_time(output, self.config, t0)
-
-            geometry.ice_area_specific_volume.write(output)
-            geometry.ice_thickness.write(output)
-            geometry.cell_type.write(output)
-            self.strain_rates.write(output)
-            self.retreat_rate.write(output)
-            self.advance_model.flux_divergence().write(output)
+            self.write_output(geometry, output, t0)
 
         time = t0
         print('time0x = {} (type {})'.format(time, type(time)))
@@ -227,12 +232,7 @@ class FrontEvolution(object):
             time += dt
             print('time1 = {}'.format(time))
             if output:
-                PISM.append_time(output, self.config, time)
-
-                geometry.ice_thickness.write(output)
-                geometry.cell_type.write(output)
-                self.retreat_rate.write(output)
-                self.advance_model.flux_divergence().write(output)
+                self.write_output(geometry, output, time)
 
 
     def cap_ice_speed(self, array, valid_max):
