@@ -2,7 +2,7 @@ import io,os
 import datetime
 
 import netCDF4
-import gdal
+from osgeo import gdal
 from cdo import Cdo
 import cf_units
 

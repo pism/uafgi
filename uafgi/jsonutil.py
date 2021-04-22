@@ -1,7 +1,7 @@
 import json
 from gdal import ogr,osr
 from uafgi import cdoutil,ncutil,functional,gdalutil,ogrutil
-import gdal
+from osgeo import gdal
 import numpy as np
 
 @functional.memoize
