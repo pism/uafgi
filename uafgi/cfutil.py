@@ -49,3 +49,20 @@ def read_time(nc, vname):
         cf_units.Unit(nctime.units, calendar=nctime.calendar). \
             num2date(nctime[:])]
 
+def convert(ncarray, from_unit, to_unit):
+    """Converts physical units.  Convenience function.
+    ncarray:
+        The data to convert.
+    from_unit: str or cf_units.Unit
+        The units ncarray is in
+    to_unit: str or cf_units.Unit
+        The units we want
+    Returns:
+        Converted data
+    """
+    if isinstance(from_unit,str):
+        from_unit = cf_units.Unit(from_unit)
+    if isinstance(to_unit,str):
+        to_unit = cf_units.Unit(to_unit)
+
+    return from_unit.convert(ncarray, to_unit)
