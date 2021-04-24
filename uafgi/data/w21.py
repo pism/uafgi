@@ -3,6 +3,7 @@ import uafgi.data
 from uafgi import pdutil,functional
 import os,csv
 import numpy as np
+import netCDF4
 
 category_descr = {
     'DW' : 'Terminating in deep warm water (DW) with the detected presence of AW (warm Atlantic waters)',
@@ -33,7 +34,7 @@ def read(map_wkt):
     #   Mouginot1,5, Brice Noël4, Bernd Scheuchl1, Isabella Velicogna1,2,
     #   Josh K. Willis2, Hong Zhang2
 
-    ddir = uafgi.data.join('GreenlandGlacierStats')
+    ddir = uafgi.data.join('wood2021')
 
     keepcols = [
         ('Glacier (Popular Name)', 'popular_name'),
@@ -130,12 +131,66 @@ def read(map_wkt):
         dfs.append(df)
 
     df = pd.concat(dfs).reset_index(drop=True)
+    # Add the glacier_number column used in Wood et al 2021's data files
+    # (This works because we've read and added things in exactly the right order)
+    df['glacier_number'] = df.index + 1
 
-
-    #df.columns = ['w21_' + str(x) for x in df.columns]
+    # Join to the files index by glacier number
+    index = pd.read_pickle(uafgi.data.join('wood2021', 'data', 'index.df')) \
+        [['data_fname', 'glacier_number']]
+    df = pdutil.merge_nodups(df, index, how='left', on='glacier_number')
 
 
     return pdutil.ext_df(df, map_wkt, add_prefix='w21_', units=col_units,
         keycols=['popular_name', 'flux_basin_mouginot_2019'],
         namecols=['popular_name', 'greenlandic_name'])
 
+# ========================================================
+
+
+_var_specs = {
+
+    ('ice_advection', 'rate') : ('ice_advection', 'rate', 'advection_rate'),
+    ('ice_advection', 'cumulative') : ('ice_advection', 'cumulative_anomaly', 'cumulative_advection_anomaly'),
+    ('ice_front_retreat', 'cumulative') : ('ice_front_retreat', 'discrete', 'retreat'),
+
+    ('ice_front_undercutting', 'rate'): ('ice_front_undercutting', 'rate', 'undercutting_rate'),
+    ('ice_front_undercutting','cumulative'): ('ice_front_undercutting', 'cumulative_anomaly', 'cumulative_undercutting_anomaly'),
+
+    ('thinning_induced_retreat', 'cumulative'): ('thinning_induced_retreat', 'thinning_induced_retreat'),
+}
+
+_subvar_suffix = {
+    'time': '_time',
+    'value': '',
+    'uncertainty': '_uncertainty',
+}
+
+def data_var(nc, qname, qtype, subvar):
+    """
+    qname:
+        Name of the quantity being sought.
+        Eg: 'ice_advection', 'ice_front_retreat',
+            'ice_front_undercutting', 'thinning_induced_retreat'
+    qtype:
+        Whether we want instantaneous ('rate') or cumulative anomaly ('cumulative')
+    subvar:
+        Which NetCDF variable for the quantity timeseries we want.
+        Eg: 'time', 'value', 'uncertainty'
+    """
+    spec = _var_specs[(qname, qtype)]
+    group = nc
+    for gname in spec[:-1]:
+        group = group.groups[gname]
+    vstem = spec[-1]    # Stem of variable names
+
+    return group.variables[vstem + _subvar_suffix[subvar]]
+
+
+def open_data(w21_data_fname):
+    """Returns full pathname of a datafile.
+    w21_data_fname:
+        Name of the data file (from the w21 dataframe above)
+    """
+    ifname = uafgi.data.join('wood2021', 'data', w21_data_fname)
+    return netCDF4.Dataset(ifname)
