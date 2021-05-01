@@ -1,9 +1,11 @@
 import pandas as pd
 import uafgi.data
-from uafgi import pdutil,functional
+from uafgi import pdutil,functional,cfutil
 import os,csv
 import numpy as np
 import netCDF4
+import scipy.interpolate
+import itertools
 
 category_descr = {
     'DW' : 'Terminating in deep warm water (DW) with the detected presence of AW (warm Atlantic waters)',
@@ -194,3 +196,172 @@ def open_data(w21_data_fname):
     """
     ifname = uafgi.data.join('wood2021', 'data', w21_data_fname)
     return netCDF4.Dataset(ifname)
+
+# ------------------------------------------------------------
+def glacier_cumulative_df(data_fname):
+    """Retrieves cumulative glacier data for one glacier, (sort of)
+    duplicating plots in the Wood et al 2021 paper.
+
+    Returns: pd.DataFrame
+        Cumulative effect of processes causing advance/retreat of the terminus.
+        Postive numbers always advance the terminus, negative for retreat.
+        May be plotted with `df.plot()`
+    Columns:
+        year (index):
+            Year of the data
+        ice_advection: [km]
+        ice_front_retreat: [km]
+        ice_front_undercutting: [km]
+        thinning_induced_retreat: [km]
+        calving: [km]
+            Calving, calucated as sum of the other columns
+        calving_rate: [km a-1]
+            Successive differences of calving
+    """
+
+    qnames = (
+            ('ice_advection',1), ('ice_front_retreat',-1), ('ice_front_undercutting',-1),
+            ('thinning_induced_retreat',-1))
+
+    # Read the data
+    data = dict()
+    tt0 = 1000000
+    tt1 = -1000000
+    with open_data(data_fname) as nc:
+        for qname,sign in qnames:
+            time = data_var(nc, qname, 'cumulative', 'time')[:].data
+            value = data_var(nc, qname, 'cumulative', 'value')[:].data
+            tt0 = min(tt0, np.min(time))
+            tt1 = max(tt1, np.max(time))
+
+
+            data[qname] = {
+                'qname': qname, 'w21_data_fname':data_fname, 'time':time,
+                'value':value*sign,
+            }
+
+    year0 = np.floor(tt0)
+    year1 = np.ceil(tt1)
+    print('year0 year1',year0,year1)
+
+
+
+    # Average by year
+    for qname in ('ice_front_retreat',):
+        row = data[qname]
+
+        df = pd.DataFrame(columns=('time', 'value'), data={'time':row['time'], 'value':row['value']})
+        df['iyear'] = (df['time'] - .5).apply(np.floor)
+        df = df.groupby(['iyear']).mean()
+        row['time'] = df.index.to_list()
+        row['value'] = df.value.to_list()
+
+    # Find range of years
+
+    # Interpolate to 1x/year
+    time2 = np.linspace(year0, year1, int(.5+1+(year1-year0)/1.))
+    cols = {'time': time2}
+    for qname,row in data.items():
+        F = scipy.interpolate.interp1d(row['time'], row['value'], fill_value='extrapolate')
+        year0 = 1990.
+        year1 = 2018.
+        cols[qname] = F(time2)
+
+    # Turn into a single dataframe
+    df = pd.DataFrame.from_dict(cols)
+    df = df.set_index('time')
+
+    # Calving is the residual of advection, frontal retreat, front
+    # undercutting and thinning-induced retreat
+    df['calving'] = df.sum(axis=1)
+
+    return df
+    
+def glacier_rate_df(data_fname):
+    """Retrieves cumulative glacier data for one glacier, (sort of)
+    duplicating plots in the Wood et al 2021 paper.
+
+    Returns: pd.DataFrame
+        Cumulative effect of processes causing advance/retreat of the terminus.
+        Postive numbers always advance the terminus, negative for retreat.
+        May be plotted with `df.plot()`
+    Columns:
+        year (index):
+            Year of the data
+        ice_advection: [km]
+        ice_front_retreat: [km]
+        ice_front_undercutting: [km]
+        thinning_induced_retreat: [km]
+        calving: [km]
+            Calving, calucated as sum of the other columns
+        calving_rate: [km a-1]
+            Successive differences of calving
+    """
+
+    qnames = (
+            ('ice_advection','rate',1), ('ice_front_undercutting','rate',-1),
+            ('ice_front_retreat','cumulative',-1), ('thinning_induced_retreat','cumulative',-1))
+
+    # Read the data
+    data = dict()
+    tt0 = 1000000
+    tt1 = -1000000
+
+    with open_data(data_fname) as nc:
+        # Read rate variables
+        for qname,qtype,sign in qnames:
+
+            # Read the raw variable and convert units
+            time = data_var(nc, qname, qtype, 'time')[:].data
+            nc_value = data_var(nc, qname, qtype, 'value')
+            if qtype == 'rate':
+                print(qname, qtype, 'value')
+                value = cfutil.convert(nc_value[:].data, nc_value.units, 'km yr-1')
+            else:
+                value = cfutil.convert(nc_value[:].data, nc_value.units, 'km')
+
+            tt0 = min(tt0, np.min(time))
+            tt1 = max(tt1, np.max(time))
+
+            data[qname] = {
+                'qname': qname, 'w21_data_fname':data_fname, 'time':time,
+                'value':value*sign,
+            }
+
+    # Timepoints to interpolate to, 1x/yr
+    year0 = np.floor(tt0)
+    year1 = np.ceil(tt1)
+    times = np.linspace(year0, year1, int(.5+1+(year1-year0)/1.))
+
+
+    # Splinify each varaible
+    cols = {'time': times}
+    for qname,qtype,_ in qnames:
+        print('Splinify ',qname)
+        row = data[qname]
+
+        # Get a Least Square Spline of the RATE
+        t0 = row['time'][0]
+        t1 = row['time'][-1]
+        knots = row['time']
+        knots = knots[np.logical_and(knots > year0, knots < year1)]
+        knots = knots[1:-1]
+
+        print(row['time'])
+        print(knots)
+        F = scipy.interpolate.LSQUnivariateSpline(row['time'], row['value'], knots)
+        if qtype == 'cumulative':
+            F = F.derivative()
+
+        # Add to dataframe we're constructing
+        cols[qname] = F(times)
+
+    # Turn into a single dataframe
+    df = pd.DataFrame.from_dict(cols)
+    df = df.set_index('time')
+
+    # Calving is the residual of advection, frontal retreat, front
+    # undercutting and thinning-induced retreat
+    df['calving'] = df.sum(axis=1)
+
+    return df
