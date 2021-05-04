@@ -85,6 +85,7 @@ def read(map_wkt):
     ]
 
 
+    do_reverse = {'SE', 'CE', 'NE'}    # These glaciers are reversed in Wood's numbering scheme
     dfs = list()
     for iroot in ('CW', 'SW', 'SE', 'CE', 'NE', 'N', 'NW'):
         ifname = os.path.join(ddir, '{}.csv'.format(iroot))
@@ -129,6 +130,10 @@ def read(map_wkt):
         # Remove wrong rows
         df = df[~df.popular_name.str.contains('Total')]
         df = df[~df.popular_name.str.contains('Mean')]
+
+        # Reverse rows for some segments
+        if iroot in do_reverse:
+            df = df.iloc[::-1]
 
         dfs.append(df)
 
@@ -331,30 +336,41 @@ def glacier_rate_df(data_fname):
     # Timepoints to interpolate to, 1x/yr
     year0 = np.floor(tt0)
     year1 = np.ceil(tt1)
+    year0 = 1995
+    year1 = 2017
     times = np.linspace(year0, year1, int(.5+1+(year1-year0)/1.))
 
 
     # Splinify each varaible
     cols = {'time': times}
     for qname,qtype,_ in qnames:
-        print('Splinify ',qname)
         row = data[qname]
 
         # Get a Least Square Spline of the RATE
         t0 = row['time'][0]
         t1 = row['time'][-1]
         knots = row['time']
-        knots = knots[np.logical_and(knots > year0, knots < year1)]
-        knots = knots[1:-1]
+        #knots = knots[np.logical_and(knots > year0, knots < year1)]
+        #knots = knots[1:-1]
 
-        print(row['time'])
-        print(knots)
-        F = scipy.interpolate.LSQUnivariateSpline(row['time'], row['value'], knots)
-        if qtype == 'cumulative':
-            F = F.derivative()
+        print('Splinify ',qname, len(row['time']), 2*len(knots))
+        if len(knots) <= 2*len(times):
+#            F = scipy.interpolate.interp1d(row['time'],row['value'])
+            F = scipy.interpolate.UnivariateSpline(row['time'], row['value'], knots, k=3)
+            values = F(times)
+            if qtype == 'cumulative':
+                F = F.derivative()
+#            if qtype == 'cumulative':
+#                values = np.insert(values.diff(), 0, np.nan, axis=0)
+        else:
+            print('LSQUSpline ',qname)
+            F = scipy.interpolate.LSQUnivariateSpline(row['time'], row['value'], knots)
+            if qtype == 'cumulative':
+                F = F.derivative()
+            values = F(times)
 
         # Add to dataframe we're constructing
-        cols[qname] = F(times)
+        cols[qname] = values
 
     # Turn into a single dataframe
     df = pd.DataFrame.from_dict(cols)
@@ -362,6 +378,6 @@ def glacier_rate_df(data_fname):
 
     # Calving is the residual of advection, frontal retreat, front
     # undercutting and thinning-induced retreat
-    df['calving'] = df.sum(axis=1)
+    df['calving'] = -df.sum(axis=1)
 
     return df
