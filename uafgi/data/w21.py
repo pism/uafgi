@@ -6,6 +6,7 @@ import numpy as np
 import netCDF4
 import scipy.interpolate
 import itertools
+import datetime
 
 category_descr = {
     'DW' : 'Terminating in deep warm water (DW) with the detected presence of AW (warm Atlantic waters)',
@@ -160,6 +161,7 @@ _var_specs = {
     ('ice_advection', 'rate') : ('ice_advection', 'rate', 'advection_rate'),
     ('ice_advection', 'cumulative') : ('ice_advection', 'cumulative_anomaly', 'cumulative_advection_anomaly'),
     ('ice_front_retreat', 'cumulative') : ('ice_front_retreat', 'discrete', 'retreat'),
+#    ('ice_front_retreat', 'cumulative') : ('ice_front_retreat', 'smoothed', 'smoothed_retreat'),
 
     ('ice_front_undercutting', 'rate'): ('ice_front_undercutting', 'rate', 'undercutting_rate'),
     ('ice_front_undercutting','cumulative'): ('ice_front_undercutting', 'cumulative_anomaly', 'cumulative_undercutting_anomaly'),
@@ -282,6 +284,18 @@ def glacier_cumulative_df(data_fname):
 
     return df
     
+# https://stackoverflow.com/questions/14313510/how-to-calculate-rolling-moving-average-using-numpy-scipy
+def moving_average(a, n=3) :
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1:] / n
+
+def dec_to_datetime(decyr):
+    year = int(decyr)
+    rem = decyr - year
+    base = datetime.datetime(year,1,1)
+    return base + datetime.timedelta(seconds= (base.replace(year=base.year + 1) - base).total_seconds() * rem)
+
 def glacier_rate_df(data_fname):
     """Retrieves cumulative glacier data for one glacier, (sort of)
     duplicating plots in the Wood et al 2021 paper.
@@ -338,39 +352,122 @@ def glacier_rate_df(data_fname):
     year1 = np.ceil(tt1)
     year0 = 1995
     year1 = 2017
-    times = np.linspace(year0, year1, int(.5+1+(year1-year0)/1.))
+    times2 = np.linspace(year0, year1, int(.5+1+(year1-year0)/1.))
+    timex = np.linspace(year0, year1, int(.5+1+(year1-year0)*20.))
 
 
     # Splinify each varaible
-    cols = {'time': times}
+    cols = {'time': times2}
+#    cols = {'time': timex}
     for qname,qtype,_ in qnames:
+
+        # Create mini dataframe just for this
         row = data[qname]
+        df = pd.DataFrame.from_dict({'time': row['time'], 'value': row['value']})
 
-        # Get a Least Square Spline of the RATE
-        t0 = row['time'][0]
-        t1 = row['time'][-1]
-        knots = row['time']
-        #knots = knots[np.logical_and(knots > year0, knots < year1)]
-        #knots = knots[1:-1]
+        # Eliminate duplicate time values
+        df = pd.DataFrame.from_dict({'time': row['time'], 'value': row['value']})
+        df = df.groupby(['time']).mean()
+        time = df.index.to_list()
+        value = df['value'].to_list()
 
-        print('Splinify ',qname, len(row['time']), 2*len(knots))
-        if len(knots) <= 2*len(times):
-#            F = scipy.interpolate.interp1d(row['time'],row['value'])
-            F = scipy.interpolate.UnivariateSpline(row['time'], row['value'], knots, k=3)
-            values = F(times)
+        # Create a datetime-type index
+        df = df.reset_index()
+        df = df.set_index(df['time'].apply(dec_to_datetime))
+
+        # Resample to weekly
+        print(df)
+        df = df.resample('W').mean()
+
+        # 52x rolling average
+        df = df.rolling(52).mean()
+
+        print(df)
+        return
+
+
+
+        # Resample/smooth to 1 year if not already
+        if True:
+            times = row['time']
+#        if times[1] - time[0] != 1.0:
+            print(qname, times[1]-times[0])
+
+            # Eliminate duplicate time values
+            df = pd.DataFrame.from_dict({'time': row['time'], 'value': row['value']})
+            df = df.groupby(['time']).mean()
+            time = df.index.to_list()
+            value = df['value'].to_list()
+#            print(time)
+#            print(value)
+
+
+            # Resample to .05 years
+#            print(np.diff(row['time']))
+#            print(row['time'][25:27], row['value'][25:27])
+            F = scipy.interpolate.interp1d(time, value, kind='cubic', bounds_error=False, fill_value=np.nan)
+            valuex = F(timex)
+
+            # 20x moving average
+            df = pd.DataFrame.from_dict({'time': timex, 'value': valuex})
+            valuex = df['value'].rolling(20).mean().array
+
+#            cols[qname] = valuex
+#            continue
+
+            timex = timex[20:]
+            valuex = valuex[20:]
+
+
+            # Interpolate and sample at times2 points
+            F = scipy.interpolate.interp1d(timex, valuex, kind='cubic', bounds_error=False, fill_value=np.nan)
+            values2 = F(times2)
+
+            # Difference by year
             if qtype == 'cumulative':
-                F = F.derivative()
+                values2 = np.insert(np.diff(values2), 0, np.nan, axis=0)
+
+            # Add to dataframe we're constructing
+            cols[qname] = values2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#        # Get a Least Square Spline of the RATE
+#        t0 = row['time'][0]
+#        t1 = row['time'][-1]
+#        knots = row['time']
+#        #knots = knots[np.logical_and(knots > year0, knots < year1)]
+#        #knots = knots[1:-1]
+#
+#        print('Splinify ',qname, len(row['time']), 2*len(knots))
+#        if len(knots) <= 2*len(times):
+##            F = scipy.interpolate.interp1d(row['time'],row['value'])
+#            F = scipy.interpolate.UnivariateSpline(row['time'], row['value'], knots, k=3)
+#            values = F(times)
 #            if qtype == 'cumulative':
-#                values = np.insert(values.diff(), 0, np.nan, axis=0)
-        else:
-            print('LSQUSpline ',qname)
-            F = scipy.interpolate.LSQUnivariateSpline(row['time'], row['value'], knots)
-            if qtype == 'cumulative':
-                F = F.derivative()
-            values = F(times)
-
-        # Add to dataframe we're constructing
-        cols[qname] = values
+#                F = F.derivative()
+##            if qtype == 'cumulative':
+##                values = np.insert(values.diff(), 0, np.nan, axis=0)
+#        else:
+#            print('LSQUSpline ',qname)
+#            F = scipy.interpolate.LSQUnivariateSpline(row['time'], row['value'], knots)
+#            if qtype == 'cumulative':
+#                F = F.derivative()
+#            values = F(times)
+#
+#        # Add to dataframe we're constructing
+#        cols[qname] = values
 
     # Turn into a single dataframe
     df = pd.DataFrame.from_dict(cols)
@@ -378,6 +475,7 @@ def glacier_rate_df(data_fname):
 
     # Calving is the residual of advection, frontal retreat, front
     # undercutting and thinning-induced retreat
-    df['calving'] = -df.sum(axis=1)
+#    df['calving'] = df.sum(axis=1)
+    df['calving'] = df.ice_front_retreat - df.ice_advection - df.ice_front_undercutting - df.thinning_induced_retreat
 
     return df
