@@ -7,6 +7,7 @@ import netCDF4
 import scipy.interpolate
 import itertools
 import datetime
+import scipy.integrate
 
 category_descr = {
     'DW' : 'Terminating in deep warm water (DW) with the detected presence of AW (warm Atlantic waters)',
@@ -347,127 +348,67 @@ def glacier_rate_df(data_fname):
                 'value':value*sign,
             }
 
+
+
     # Timepoints to interpolate to, 1x/yr
     year0 = np.floor(tt0)
     year1 = np.ceil(tt1)
     year0 = 1995
     year1 = 2017
     times2 = np.linspace(year0, year1, int(.5+1+(year1-year0)/1.))
-    timex = np.linspace(year0, year1, int(.5+1+(year1-year0)*20.))
+    # Jul 1 2010 -- Jun 30 2011 ==> label '2011'
+    low_times2 = times2 - .5
+    high_times2 = times2 + .5
 
 
     # Splinify each varaible
     cols = {'time': times2}
-#    cols = {'time': timex}
     for qname,qtype,_ in qnames:
-
-        # Create mini dataframe just for this
         row = data[qname]
-        df = pd.DataFrame.from_dict({'time': row['time'], 'value': row['value']})
 
-        # Eliminate duplicate time values
-        df = pd.DataFrame.from_dict({'time': row['time'], 'value': row['value']})
-        df = df.groupby(['time']).mean()
-        time = df.index.to_list()
-        value = df['value'].to_list()
+        # See if the quantity is already resampled to annual
+        times = row['time']
+        if times[1] - times[0] == 1.0:
+            # Expand list of times, with NaN where no data.
+            df2 = pd.DataFrame.from_dict({'time': times2})
+            df = pd.DataFrame.from_dict({'time': row['time'], 'value': row['value']})
+            df = pd.merge(df2, df, on='time', how='left')
+            values2 = df['value']
 
-        # Create a datetime-type index
-        df = df.reset_index()
-        df = df.set_index(df['time'].apply(dec_to_datetime))
+            # Difference by year, if needed
+            if qtype == 'cumulative':
+                values2 = np.insert(np.diff(values2), 0, np.nan, axis=0)
 
-        # Resample to weekly
-        print(df)
-        df = df.resample('W').mean()
-
-        # 52x rolling average
-        df = df.rolling(52).mean()
-
-        print(df)
-        return
-
-
-
-        # Resample/smooth to 1 year if not already
-        if True:
-            times = row['time']
-#        if times[1] - time[0] != 1.0:
-            print(qname, times[1]-times[0])
-
+        else:
             # Eliminate duplicate time values
             df = pd.DataFrame.from_dict({'time': row['time'], 'value': row['value']})
             df = df.groupby(['time']).mean()
             time = df.index.to_list()
             value = df['value'].to_list()
-#            print(time)
-#            print(value)
+
+            # Spline interpolate existing data
+#            F = scipy.interpolate.UnivariateSpline(row['time'], row['value'], k=1, ext=3)
+            F = scipy.interpolate.interp1d(time, value,
+                kind='cubic', bounds_error=False, fill_value=np.nan)
 
 
-            # Resample to .05 years
-#            print(np.diff(row['time']))
-#            print(row['time'][25:27], row['value'][25:27])
-            F = scipy.interpolate.interp1d(time, value, kind='cubic', bounds_error=False, fill_value=np.nan)
-            valuex = F(timex)
-
-            # 20x moving average
-            df = pd.DataFrame.from_dict({'time': timex, 'value': valuex})
-            valuex = df['value'].rolling(20).mean().array
-
-#            cols[qname] = valuex
-#            continue
-
-            timex = timex[20:]
-            valuex = valuex[20:]
-
-
-            # Interpolate and sample at times2 points
-            F = scipy.interpolate.interp1d(timex, valuex, kind='cubic', bounds_error=False, fill_value=np.nan)
-            values2 = F(times2)
-
-            # Difference by year
             if qtype == 'cumulative':
-                values2 = np.insert(np.diff(values2), 0, np.nan, axis=0)
-
-            # Add to dataframe we're constructing
-            cols[qname] = values2
-
-
-
-
-
-
-
-
+                # Rate is difference between end and beginning of each year
+                values2 = F(high_times2) - F(low_times2)
+            else:
+                # Rate is integral of Spline over each year (divided by 1 year)
+#                values2 = np.array([F.integral(lt, ht) for lt,ht in zip(low_times2, high_times2)])
+                values2 = np.array([scipy.integrate.quad(F, lt, ht)[0] for lt,ht in zip(low_times2, high_times2)])
+#                vals = list()
+#                for lt,ht in zip(low_times2, high_times2):
+#                    y,_,_,_,_ = 
+#                print(values2)
 
 
+        # Add to dataframe we're constructing
+        print(qname, values2.shape)
+        cols[qname] = values2
 
-
-
-
-#        # Get a Least Square Spline of the RATE
-#        t0 = row['time'][0]
-#        t1 = row['time'][-1]
-#        knots = row['time']
-#        #knots = knots[np.logical_and(knots > year0, knots < year1)]
-#        #knots = knots[1:-1]
-#
-#        print('Splinify ',qname, len(row['time']), 2*len(knots))
-#        if len(knots) <= 2*len(times):
-##            F = scipy.interpolate.interp1d(row['time'],row['value'])
-#            F = scipy.interpolate.UnivariateSpline(row['time'], row['value'], knots, k=3)
-#            values = F(times)
-#            if qtype == 'cumulative':
-#                F = F.derivative()
-##            if qtype == 'cumulative':
-##                values = np.insert(values.diff(), 0, np.nan, axis=0)
-#        else:
-#            print('LSQUSpline ',qname)
-#            F = scipy.interpolate.LSQUnivariateSpline(row['time'], row['value'], knots)
-#            if qtype == 'cumulative':
-#                F = F.derivative()
-#            values = F(times)
-#
-#        # Add to dataframe we're constructing
-#        cols[qname] = values
 
     # Turn into a single dataframe
     df = pd.DataFrame.from_dict(cols)
