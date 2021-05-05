@@ -250,7 +250,7 @@ def glacier_cumulative_df(data_fname):
 
     year0 = np.floor(tt0)
     year1 = np.ceil(tt1)
-    print('year0 year1',year0,year1)
+#    print('year0 year1',year0,year1)
 
 
 
@@ -335,7 +335,7 @@ def glacier_rate_df(data_fname):
             time = data_var(nc, qname, qtype, 'time')[:].data
             nc_value = data_var(nc, qname, qtype, 'value')
             if qtype == 'rate':
-                print(qname, qtype, 'value')
+#                print(qname, qtype, 'value')
                 value = cfutil.convert(nc_value[:].data, nc_value.units, 'km yr-1')
             else:
                 value = cfutil.convert(nc_value[:].data, nc_value.units, 'km')
