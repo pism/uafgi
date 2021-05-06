@@ -8,7 +8,7 @@ def read(map_wkt):
     # They are constructed to each contain the point from w21
     # No labels.  Join an existing table, with locations obtained from bkm21,
     # to add fjord outlines to it.
-    df = pd.DataFrame(shputil.read(uafgi.data.join('fj/fjord_outlines.shp'), map_wkt)) \
+    df = pd.DataFrame(shputil.read(uafgi.data.join('fj/fjord_outlines.shp'), wkt=map_wkt)) \
         .drop(['_shape0', 'id'], axis=1) \
         .rename(columns={'_shape':'poly'})
 

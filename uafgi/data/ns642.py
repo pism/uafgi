@@ -25,7 +25,7 @@ def read(map_wkt):
 
     all_namecols = ['GlacName', 'GrnlndcNam', 'Name','Official_n', 'AltName', 'GrnlndcNam']
     for leaf,y0,y1 in sorted(leaves[0]):
-        df = pd.DataFrame(shputil.read(os.path.join(ddir,leaf), map_wkt))
+        df = pd.DataFrame(shputil.read(os.path.join(ddir,leaf), wkt=map_wkt))
         df['year0'] = y0
         df['year1'] = y1
         namecols = [x for x in all_namecols if x in df.columns]
@@ -36,7 +36,7 @@ def read(map_wkt):
 
     # Different data format 2014 and beyond
     for leaf,y0,y1 in sorted(leaves[1]):
-        df = pd.DataFrame(shputil.read(os.path.join(ddir,leaf), map_wkt))
+        df = pd.DataFrame(shputil.read(os.path.join(ddir,leaf), wkt=map_wkt))
         df['year0'] = y0
         df['year1'] = y1
         namecols = [x for x in all_namecols if x in df.columns]

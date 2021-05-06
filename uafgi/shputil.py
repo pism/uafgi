@@ -86,20 +86,20 @@ def get_transformer(fname, wkt1):
     # See for always_xy: https://proj.org/faq.html#why-is-the-axis-ordering-in-proj-not-consistent
     return pyproj.Transformer.from_crs(crs0, crs1, always_xy=True)
 
-def read(fname, wkt1=None, read_shape=True):
+def read(fname, read_shapes=True, wkt=None):
     """read_shapes:
         Should the shape actually be read?  (Or just the attributes)?
     """
 
-    if read_shape:
-        proj = get_transformer(fname, wkt1)
+    if read_shapes:
+        proj = get_transformer(fname, wkt)
 
     with shapefile.Reader(fname) as reader:
         #fields = reader.fields
         for i in range(0, len(reader)):
             rec = reader.record(i).as_dict()
 
-            if read_shape:
+            if read_shapes:
                 shape_raw = reader.shape(i)
                 shape0,shape = shapely_converters[shape_raw.shapeType](shape_raw, proj.transform)
                 rec['_shape0'] = shape0    # Raw coordinates
@@ -107,33 +107,40 @@ def read(fname, wkt1=None, read_shape=True):
             yield rec
 
 
-def read_df(fname, wkt1=None, read_shape=True, shape0=None, shape=None, add_prefix=None):
+def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='loc', add_prefix=None):
     """
+    wkt:
+        Project shapes into this projection(if they are being read).
+    read_shapes:
+        Should the acutal shapes be read?  Or just the metadata?
     shape0:
         Name to call the "shape0" columns when all is said and done
+        (i.e. the original shape, before it was reprojected)
+    Returns columns:
+        fid:
+            File ID, the ID used to read this record back with a ShapeFile reader
     """
 
-    df = pd.DataFrame(read(fname, wkt1=wkt1, read_shape=read_shape))
+    df = pd.DataFrame(read(fname, wkt=wkt, read_shapes=read_shapes))
     df = df.reset_index().rename(columns={'index':'fid'})    # Add a key column
 
     drops = list()
     renames = dict()
 
     # ------- Rename or drop shape-related columns
-    if shape0 is None:
-        drops.append('_shape0')
-    else:
-        renames['_shape0'] = shape0
+    if read_shapes:
+        if shape0 is None:
+            drops.append('_shape0')
+        else:
+            renames['_shape0'] = shape0
 
-    if shape is None:
-        drops.append('_shape')
-    else:
-        renames['_shape'] = shape
+        if shape is None:
+            drops.append('_shape')
+        else:
+            renames['_shape'] = shape
 
-
-
-    df = df.drop(['_shape0', 'id'], axis=1).rename(columns={'_shape': 'loc'})
-    up = pdutil.ext_df(df, wkt1, add_prefix=add_prefix,
+    df = df.drop(drops, axis=1).rename(columns=renames)
+    up = pdutil.ext_df(df, wkt, add_prefix=add_prefix,
         units={},
         keycols=['fid'])
 

@@ -91,8 +91,8 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, 
 
     dt0 = datetime.datetime(year,1,1)
     t0_s = fb.time_units_s.date2num(dt0)
-    dt1 = datetime.datetime(year,4,1)
-#    dt1 = datetime.datetime(year,1,10)
+#    dt1 = datetime.datetime(year,4,1)
+    dt1 = datetime.datetime(year,1,10)
     t1_s = fb.time_units_s.date2num(dt1)
 
     # ---------------------------------------------------------------

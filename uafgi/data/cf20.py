@@ -24,7 +24,7 @@ def read(map_wkt):
 
         fname = os.path.join(ddir,leaf)
 
-        df = pd.DataFrame(shputil.read(fname, map_wkt, read_shape=False))
+        df = pd.DataFrame(shputil.read(fname, read_shapes=False))
 
         # All the rows are the same, except different terminus line / position / etc
         row = df.loc[0].to_dict()

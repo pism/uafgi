@@ -1,6 +1,6 @@
 import pandas as pd
 import uafgi.data
-from uafgi import pdutil,functional,cfutil
+from uafgi import pdutil,functional,cfutil,shputil
 import os,csv
 import numpy as np
 import netCDF4
@@ -8,6 +8,7 @@ import scipy.interpolate
 import itertools
 import datetime
 import scipy.integrate
+import shapely
 
 category_descr = {
     'DW' : 'Terminating in deep warm water (DW) with the detected presence of AW (warm Atlantic waters)',
@@ -153,6 +154,39 @@ def read(map_wkt):
     return pdutil.ext_df(df, map_wkt, add_prefix='w21_', units=col_units,
         keycols=['popular_name', 'flux_basin_mouginot_2019'],
         namecols=['popular_name', 'greenlandic_name'])
+
+
+def read_termini(map_wkt):
+    df=pd.DataFrame(shputil.read(
+        uafgi.data.join('wood2021', 'Greenland_Glacier_Ice_Front_Positions.shp'),
+        read_shapes=True, wkt=map_wkt))
+    df = df.rename(columns={'_shape':'terminus'}) \
+        .drop(['_shape0'], axis=1)
+
+    return pdutil.ext_df(df, map_wkt,
+        add_prefix='w21t_',
+        keycols=['Glacier', 'Year', 'Day_of_Yea'])
+
+
+def termini_by_glacier(w21t):
+    """Collects rows from original read_termini() DataFrame by Glacier Name.
+    Breaks the terminus lines apart into multiple points.
+    Analogous to ns642.by_glacier_id()"""
+
+    dfg = w21t.df.groupby(by='w21t_Glacier')
+
+    data = list()
+    for name, gr in dfg:
+        pointss = [list(ls.coords) for ls in gr['w21t_terminus']]
+        points = list(itertools.chain.from_iterable(pointss))    # Join to a single list
+        data.append([name, shapely.geometry.MultiPoint(points)])
+        
+    df2 = pd.DataFrame(data=data, columns=['w21t_Glacier', 'w21t_points'])
+    df2['w21t_key'] = df2['w21t_Glacier']
+    xdf = w21t.replace(df=df2, keycols=['w21t_Glacier'])
+    return xdf
+
+
 
 # ========================================================
 

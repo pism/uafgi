@@ -51,12 +51,13 @@ def ext_df(df0, map_wkt, add_prefix=None, units=dict(), lonlat=None, namecols=No
     #        (ultimately from glacier location database files)
     wgs84 = pyproj.CRS.from_epsg("4326")
 
-    # Assume all grids use the same projection (NSIDC Polar Stereographic)
-    # Project everything to it
-    map_crs = pyproj.CRS.from_string(map_wkt)
+    if map_wkt is not None:
+        # Assume all grids use the same projection (NSIDC Polar Stereographic)
+        # Project everything to it
+        map_crs = pyproj.CRS.from_string(map_wkt)
 
-    # Transform from lat/lon into map projection
-    transform_wgs84 = pyproj.Transformer.from_crs(wgs84,map_crs,always_xy=True)
+        # Transform from lat/lon into map projection
+        transform_wgs84 = pyproj.Transformer.from_crs(wgs84,map_crs,always_xy=True)
     # -------------------------------------------------
 
 
@@ -67,7 +68,7 @@ def ext_df(df0, map_wkt, add_prefix=None, units=dict(), lonlat=None, namecols=No
     # Figure out prefix stuff
     if add_prefix is None:
         # Infer common prefix in column names, if any
-        self_prefix = pathutil.commonprefix(list(df))
+        self_prefix = pathutil.commonprefix(list(self_df))
     else:
         self_prefix = add_prefix
 
@@ -83,7 +84,7 @@ def ext_df(df0, map_wkt, add_prefix=None, units=dict(), lonlat=None, namecols=No
 
 
     # Create a 'loc' column based on projecting the lon/lat coordinates of two original cols
-    if lonlat is not None:
+    if lonlat is not None and map_wkt is not None:
         self_df[self_prefix+'loc'] = points_col(self_df[lonlat[0]], self_df[lonlat[1]], transform_wgs84)
         self_units[self_prefix+'loc'] = 'm'    # TODO: Fish this out of the projection
 
