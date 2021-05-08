@@ -165,6 +165,118 @@ class JoinError(ValueError):
         super().__init__(msg)
         self.df = df
 
+def _match_left_join(sself, overrides=None, ignore_dups=False, match_cols=None, right_cols=None):
+    """Given a raw Match, returns a DataFrame that can be used for a left
+    outer join.  It will have (assuming ExtDfs named 
+      1. No more than copy of each row of the left ExtDf
+      2. Columns: [<left>_ix, <left>_key, <right>_ix, <right>_key]
+
+    Raises a JoinError if the (1) cannot be satisfied.
+
+    match: Match
+        Raw result of a match
+    overrides: DataFrame
+        Manual overrides for the join.
+        Contains columns: [<left>_key, <right>_key]
+    ignore_dups:
+        Remove any duplicate rows (on the left key) from the join.
+        Otherwise, raise a JoinError on any duplicate rows.
+    match_cols: [str, ...]
+        Columns from the match dataframe to keep in final result.
+    right_cols: [str, ...]
+        Names of columns from right DataFrame to keep.
+        If None, keep all columns.
+    """
+
+    # Column names / shortcuts
+    left = sself.xfs[0]
+    left_ix = left.prefix + 'ix'
+    left_key = left.prefix + 'key'
+    right = sself.xfs[1]
+    right_ix = right.prefix + 'ix'
+    right_key = right.prefix + 'key'
+#    print('left_ix={}, right_ix={}'.format(left_ix,right_ix))
+
+    # Make dummy overrides
+    if overrides is None:
+        overrides = pd.DataFrame(columns=[left_ix, left_key, right_ix, right_key])
+
+    else:
+        # Add index columns to overrides (for convenient joining w/ other tables)
+        for xf in sself.xfs:
+            df = xf.df
+            key = xf.prefix+'key'
+
+            try:
+                overrides = pd.merge(overrides, df[[key]].reset_index(), how='left', on=key) \
+                    .rename(columns={'index':xf.prefix+'ix'})
+            except KeyError as ke:
+                print('Is a column missing from your overrides table?')
+                raise
+
+        # Keep only the required columns
+        overrides = overrides[[left_ix, left_key, right_ix, right_key]]
+
+        # Remove rows with missing right_key or left_key
+        overrides = overrides.dropna(how='any', axis=0)
+
+
+    # Make sure there are no duplicates in overrides
+    overrides = check_dups(overrides, 'overrides', left_key)
+
+    # Remove overridden rows (from left) from our match DataFrame
+    df = pd.merge(sself.df, overrides[[left_key]], how='left', on=left_key, indicator=True)
+    df = df[df['_merge'] != 'both'].drop(['_merge'], axis=1)
+    df = check_dups(df, left.prefix, left_key, ignore_dups=ignore_dups)
+
+    # ----------------------------------------------------
+    # Remove extraneous columns
+    df = df[[left_ix, left_key, right_ix, right_key]]
+
+    # Add in (manual) overrides (and re-index)
+    if len(overrides) > 0:
+        df = pd.concat([overrides,df], ignore_index=True)
+
+    matchdf = df
+
+    # -------------------------------------------
+    # Do the join!
+    # https://stackoverflow.com/questions/11976503/how-to-keep-index-when-using-pandas-merge
+
+    # Join left -- matchdf
+    df = left.df.copy()    # Shallow copy
+    df['index'] = df.index
+    df = pd.merge(df,
+        matchdf, how='left',
+        left_index=True, right_on=left_ix,
+        suffixes=(None,'_DELETEME')).set_index('index')
+
+    # Join (left -- matchdf) -- right
+    df['index'] = df.index
+    df = pd.merge(df,#.reset_index(),
+        right.df if right_cols is None else right.df[right_cols],
+        how='left', left_on=right_ix, right_index=True,
+        suffixes=(None,'_DELETEME')).set_index('index')
+
+#    df = df.reset_index()
+
+#    try:
+#        print('dddddddxxxxxxxxxxxxxxxxxxxxxxxxxf\n',df[['w21_key', 'cf20_key']])
+#    except:
+#        pass
+
+
+
+    # Remove extra columns that accumulated in the join
+    drops = {x for x in df.columns if x.endswith('_DELETEME')}
+    drops.update([left_ix, right_ix])
+    if (right_cols is not None) and (right_key not in right_cols):
+        drops.add(right_key)
+    df = df.drop(drops, axis=1)
+
+
+    return sself.xfs[0].replace(df=df)
+
 class Match(gicollections.MutableNamedTuple):
     __slots__ = (
         'xfs',     # (left, right): ExtDfs being joined
@@ -180,117 +292,9 @@ class Match(gicollections.MutableNamedTuple):
         """Swaps left and right, returns new Match object"""
         return Match(self.xfs[::-1], self.cols[::-1], self.df)
 
-    def left_join(self, overrides=None, ignore_dups=False, match_cols=None, right_cols=None):
+    def left_join(self, **kwargs):
+        return _match_left_join(self, **kwargs)
 
-        """Given a raw Match, returns a DataFrame that can be used for a left
-        outer join.  It will have (assuming ExtDfs named 
-          1. No more than copy of each row of the left ExtDf
-          2. Columns: [<left>_ix, <left>_key, <right>_ix, <right>_key]
-
-        Raises a JoinError if the (1) cannot be satisfied.
-
-        match: Match
-            Raw result of a match
-        overrides: DataFrame
-            Manual overrides for the join.
-            Contains columns: [<left>_key, <right>_key]
-        ignore_dups:
-            Remove any duplicate rows (on the left key) from the join.
-            Otherwise, raise a JoinError on any duplicate rows.
-        match_cols: [str, ...]
-            Columns from the match dataframe to keep in final result.
-        right_cols: [str, ...]
-            Names of columns from right DataFrame to keep.
-            If None, keep all columns.
-        """
-
-        # Column names / shortcuts
-        left = self.xfs[0]
-        left_ix = left.prefix + 'ix'
-        left_key = left.prefix + 'key'
-        right = self.xfs[1]
-        right_ix = right.prefix + 'ix'
-        right_key = right.prefix + 'key'
-#        print('left_ix={}, right_ix={}'.format(left_ix,right_ix))
-
-        # Make dummy overrides
-        if overrides is None:
-            overrides = pd.DataFrame(columns=[left_ix, left_key, right_ix, right_key])
-
-        else:
-            # Add index columns to overrides (for convenient joining w/ other tables)
-            for xf in self.xfs:
-                df = xf.df
-                key = xf.prefix+'key'
-
-                try:
-                    overrides = pd.merge(overrides, df[[key]].reset_index(), how='left', on=key) \
-                        .rename(columns={'index':xf.prefix+'ix'})
-                except KeyError as ke:
-                    print('Is a column missing from your overrides table?')
-                    raise
-
-            # Keep only the required columns
-            overrides = overrides[[left_ix, left_key, right_ix, right_key]]
-
-            # Remove rows with missing right_key or left_key
-            overrides = overrides.dropna(how='any', axis=0)
-
-        # Make sure there are no duplicates in overrides
-        overrides = check_dups(overrides, 'overrides', left_key)
-
-        # Remove overridden rows (from left) from our match DataFrame
-        df = pd.merge(self.df, overrides[[left_key]], how='left', on=left_key, indicator=True)
-        df = df[df['_merge'] != 'both'].drop(['_merge'], axis=1)
-        df = check_dups(df, left.prefix, left_key, ignore_dups=ignore_dups)
-
-        # ----------------------------------------------------
-        # Remove extraneous columns
-        df = df[[left_ix, left_key, right_ix, right_key]]
-
-        # Add in (manual) overrides (and re-index)
-        if len(overrides) > 0:
-            df = pd.concat([overrides,df], ignore_index=True)
-
-        matchdf = df
-
-        # -------------------------------------------
-        # Do the join!
-        # https://stackoverflow.com/questions/11976503/how-to-keep-index-when-using-pandas-merge
-
-        # Join left -- matchdf
-        df = left.df.copy()    # Shallow copy
-        df['index'] = df.index
-        df = pd.merge(df,
-            matchdf, how='left',
-            left_index=True, right_on=left_ix,
-            suffixes=(None,'_DELETEME')).set_index('index')
-
-        # Join (left -- matchdf) -- right
-        df['index'] = df.index
-        df = pd.merge(df,#.reset_index(),
-            right.df if right_cols is None else right.df[right_cols],
-            how='left', left_on=right_ix, right_index=True,
-            suffixes=(None,'_DELETEME')).set_index('index')
-
-#        df = df.reset_index()
-
-#        try:
-#            print('dddddddxxxxxxxxxxxxxxxxxxxxxxxxxf\n',df[['w21_key', 'cf20_key']])
-#        except:
-#            pass
-
-
-
-        # Remove extra columns that accumulated in the join
-        drops = {x for x in df.columns if x.endswith('_DELETEME')}
-        drops.update([left_ix, right_ix])
-        if (right_cols is not None) and (right_key not in right_cols):
-            drops.add(right_key)
-        df = df.drop(drops, axis=1)
-
-
-        return self.xfs[0].replace(df=df)
 
 def override_cols(df, overrides, keycol, cols):
     """Joins df with overrides on keycol; and replaces any of df.cols with overrides.cols
