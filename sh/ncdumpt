@@ -1,0 +1,61 @@
+#!/usr/bin/env pythone
+#
+# Script like ncdump, but converts time variables to Python datetimes.
+
+import sys
+import os
+import netCDF4
+import argparse
+import numpy as np
+import cf_units
+import datetime
+import subprocess
+
+
+parser = argparse.ArgumentParser(description='Dump CF Time variables in a NetCDF file')
+parser.add_argument(
+    '-v', dest='vname', nargs=1,
+    default='time',
+    help='Variable name to dump')
+
+parser.add_argument(
+    '-u', dest='units', nargs=1,
+    default=None,
+    help='Time units (if not already on the arg)')
+
+parser.add_argument(
+    '-c', dest='calendar', nargs=1,
+    default="proleptic_gregorian",
+    help='Time units (if not already on the arg)'
+)
+"proleptic_gregorian"
+
+parser.add_argument(
+    'fname', nargs=1,
+    help='NetCDF file to open')
+
+args = parser.parse_args()
+
+with netCDF4.Dataset(args.fname[0]) as nc:
+    ncv = nc.variables[args.vname[0]]
+    if args.units is None:
+        units = ncv.units
+    else:
+        units = args.units[0]
+    calendar = args.calendar
+    if calendar is None:
+        calendar = ncv.calendar
+
+    
+    cfdates = cf_units.Unit(units, calendar=calendar).num2date(ncv[:])
+
+    vfunc = np.vectorize(lambda dt: datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second))
+    datetimes = vfunc(cfdates)
+
+
+cmd = ['ncdump', '-h', args.fname[0]]
+subprocess.run(cmd)
+
+
+print('{} = {}'.format(args.vname[0], datetimes))
+
