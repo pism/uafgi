@@ -3,7 +3,7 @@ import os,sys
 import numpy as np
 import pandas as pd
 import datetime
-from uafgi import argutil,gdalutil,glacier,bedmachine,ncutil
+from uafgi import argutil,gdalutil,glacier,bedmachine,ncutil,glacier
 import uafgi.data
 from uafgi.pism import pismutil
 from uafgi.pism import calving0
@@ -25,7 +25,9 @@ blackout_names = {
 
 
 
-def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file_raw, tdir, dry_run=False, row=None, **pism_kwargs0):
+def run_pism(ns481_grid, fjord_classes, velocity_file, output_file, tdir, dry_run=False, attrs=dict(),
+    itime=None, year=None,
+    dt_s=90*86400., remove_downstream_ice=True, delete_vars=list(), **pism_kwargs0):
     """Does a single PISM run
     ns481_grid:
         Name of the grid on which this runs (as per NSIDC-0481 dataset)
@@ -40,8 +42,18 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file_raw, td
         (for use in make rules)
     dry_run:
         If true, just return (inputs, outputs)
-    row: pd.Series
+    attrs: pd.Series (or just a dict)
         Row of a Pandas Dataframe, to write to output file
+    itime: int
+        Index into time dimension of velocity file
+        NOTE: Either set year or itime
+    year: int
+        Year (of time dimension) to use
+        NOTE: Either set year or itime
+    dt_s: [s]
+        Length of time to run for
+    remove_downstream_ice:
+        Should ice downstream of the terminus line be removed?
     pism_kwargs0:
         kwargs given to PISM run
     """
@@ -77,8 +89,9 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file_raw, td
         thickness = nc.variables['thickness'][:]
 
     # Remove ice downstream of the terminus
-    down_fjord = np.isin(fjord_classes, glacier.LT_TERMINUS)
-    thickness[down_fjord] = 0
+    if remove_downstream_ice:
+        down_fjord = np.isin(fjord_classes, glacier.LT_TERMINUS)
+        thickness[down_fjord] = 0
 
     # Copy original local BedMachine file, with new ice terminus
     bedmachine_file1 = tdir.filename(suffix='.nc')
@@ -86,15 +99,15 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file_raw, td
 
     # Obtain start and end time in PISM units (seconds)
     fb = gdalutil.FileInfo(velocity_file)
-    years_ix = dict((dt.year,ix) for ix,dt in enumerate(fb.datetimes))
-    itime = years_ix[year]    # Index in velocity file
+    if itime is None:
+        years_ix = dict((dt.year,ix) for ix,dt in enumerate(fb.datetimes))
+        itime = years_ix[year]    # Index in velocity file
+    elif year is None:
+        year = fb.datetimes[itime].year
 
     dt0 = datetime.datetime(year,1,1)
     t0_s = fb.time_units_s.date2num(dt0)
-#    dt1 = datetime.datetime(year,4,1)
-    dt1 = datetime.datetime(year,1,10)
-    t1_s = fb.time_units_s.date2num(dt1)
-
+    t1_s = t0_s + dt_s
     # ---------------------------------------------------------------
 
     print('============ Running year {}'.format(year))
@@ -162,12 +175,14 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file_raw, td
 
     # ----------------------- Post-processing
     output_file_tmp = tdir.filename()
-    pismutil.fix_output(output_file3, exception, fb.time_units_s, output_file_tmp)
+    pismutil.fix_output(output_file3, exception, fb.time_units_s, output_file_tmp, delete_vars=delete_vars)
 
     with netCDF4.Dataset(output_file_tmp, 'a') as nc:
+
         # Debug
-        ncv = nc.createVariable('fjord_classes', 'i1', ('y','x'), zlib=True)
-        ncv[:] = fjord_classes
+        if fjord_classes is not None:
+            ncv = nc.createVariable('fjord_classes', 'i1', ('y','x'), zlib=True)
+            ncv[:] = fjord_classes
 
         # Add parameter info
         nc.creator = '04_run_experiment.py'
@@ -178,7 +193,7 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file_raw, td
             nc.setncattr(key,val)
 
         # Add info from Pandas Series
-        for col,val in row.items():
+        for col,val in attrs.items():
             mt = (type(val).__module__, type(val).__name__)
             if mt not in blackout_types and col not in blackout_names:
                 try:
@@ -188,5 +203,82 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file_raw, td
                     raise
 
     # ------------------- Create final output file
-    os.makedirs(os.path.split(output_file_raw)[0], exist_ok=True)
-    os.rename(output_file_tmp, output_file_raw)
+    os.makedirs(os.path.split(output_file)[0], exist_ok=True)
+    os.rename(output_file_tmp, output_file)
+
+
+
+
+def get_von_Mises_stress(ns481_grid, velocity_file, output_file, tdir, **kwargs):
+	"""Runs PISM just a baby amount, to get the von Mises stress on the first timestep."""
+    args = (ns481_grid, None, velocity_file, output_file, tdir)
+    kwargs2 = kwargs.copy()
+    kwargs2['remove_downstream_ice'] = False    # Don't cut off any ice below the terminus
+    kwargs2['dt_s'] = 100.                     # Run only briefly
+    kwargs2['delete_vars'] = {'ice_area_specific_volume', 'thk', 'mask', 'total_retreat_rate', 'flux_divergence'}
+
+    return run_pism(*args, **kwargs2)
+
+
+
+def compute_sigma_itslive(velocity_file, ns481_grid, ofname, tdir):
+    """Computes sigma for ItsLIVE files
+    velocity_file:
+        Input file (result of merge_to_pism_rule()) with multiple timesteps
+    ofname:
+        Output file
+    """
+    # Create output file, based on input file
+    with netCDF4.Dataset(velocity_file) as ncin:
+        schema = ncutil.Schema(ncin)
+
+        for vname in ('u_ssa_bc', 'v_ssa_bc', 'v'):
+            del schema.vars[vname]
+
+        ntime = len(ncin.dimensions['time'])
+        #nc481_grid = ncin.ns481_grid
+
+
+    # Initialize output file
+    with netCDF4.Dataset(ofname, 'w') as ncout:
+        # Create output file, copying struture of input
+        schema.create(ncout)
+        var_kwargs = {'zlib': True}
+
+        # Add new variables
+        for ix in (0,1):
+            ncv = ncout.createVariable(f'strain_rates_{ix}', 'd', ('time', 'y', 'x'), **var_kwargs)
+            ncv.long_name = f'Eigenvalue #{ix} of strain rate, used to compute von Mises stress; see glacier.von_mises_stress_eig()'
+        ncv = ncout.createVariable(f'sigma', 'd', ('time', 'y', 'x'), **var_kwargs)
+        ncv.long_name = 'von Mises Stress'
+        ncv.description = 'Computed using glacier.von_mises_stress_eig()'
+        ncv.units = 'Pa'
+
+
+
+    # Generate sigmas for each timestep
+    for itime in range(ntime):
+        of_tmp = tdir.filename()
+        get_von_Mises_stress(
+            ns481_grid, velocity_file,
+            of_tmp, tdir,
+            itime=itime,
+            dry_run=False,
+            sigma_max=1.e6,    # Doesn't matter
+            dt_s=100.)            # Really short
+
+        # Copy from temporary file into final output file
+        eig = list()
+        with netCDF4.Dataset(ofname, 'a') as ncout:
+            with netCDF4.Dataset(of_tmp) as ncin:
+                for ix in (0,1):
+                    L = ncin.variables['strain_rates[{}]'.format(ix)][:]
+                    eig.append(L)
+                    ncv = ncout.variables['strain_rates_{}'.format(ix)]
+                    ncv[itime,:] = L
+
+            ncout.variables['sigma'][itime,:] = glacier.von_mises_stress_eig(*eig)
+
+                        
+
+
