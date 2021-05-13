@@ -152,7 +152,7 @@ class FrontEvolution(object):
         t1:
             End time
         """
-        day_length = 86400.0
+        by_day_length = 1./86400.0
 
 #        if report_filename is not None:
 #            output = PISM.util.prepare_output(report_filename, append_time=False)
@@ -202,7 +202,8 @@ class FrontEvolution(object):
             if time + dt > t1:
                 dt = t1 - time
 
-            print(f"{time/day_length:.2f}, dt = {dt:.2f} (s) or {dt/day_length:2.2f} days")
+            print("{:.2f}, dt = {:.2f} (s) or {:2.2f} days".format(
+                time*by_day_length, dt, dt*by_day_length))
 
             self.advance_model.flow_step(
                 geometry, dt, self.ice_velocity,
