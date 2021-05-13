@@ -1,8 +1,9 @@
 import os
 import subprocess
 import netCDF4
+from uafgi import ncutil
 
-def fix_output(output_file3, exception, time_units_s, output_file4):
+def fix_output(output_file3, exception, time_units_s, output_file4, delete_vars=list()):
     """Compress PISM output file while correcting time units; and removes original.
     exception:
         Exception (if any) that occurred while running PISM
@@ -19,17 +20,19 @@ def fix_output(output_file3, exception, time_units_s, output_file4):
 
     """
 
-    # Convert to NetCDF
+    # Convert to NetCDF4
     print('Compressing PISM output to NetCDF4...')
-    cmd = ['ncks', '-4', '-L', '1', '-O', output_file3, output_file4]
-    subprocess.run(cmd, check=True)
-    #os.remove(output_file3)
+    with netCDF4.Dataset(output_file3, 'r') as ncin:
+        schema = ncutil.Schema(ncin)
 
-    # Fix up time units to be CF compliant
-    with netCDF4.Dataset(output_file4, 'a') as nc:
-        nc.success = ('t' if exception is None else 'f')
-        if exception is not None:
-            nc.error_msg = str(exception)
-        nc.variables['time'].units = str(time_units_s) # 'seconds since {:04d}-{:02d}-{:02d}'.format(dt0.year,dt0.month,dt0.day)
-        nc.variables['time'].calendar = 'proleptic_gregorian'
+        # Remove excess variables
+        print('delete_vars ', delete_vars)
+        for vname in delete_vars:
+            del schema.vars[vname]
 
+        # Fix time units
+        ncv = schema.vars['time']
+        ncv.attrs['units'] = str(time_units_s) # 'seconds since {:04d}-{:02d}-{:02d}'.format(dt0.year,dt0.month,dt0.day)
+        ncv.attrs['calendar'] = 'proleptic_gregorian'
+
+        schema.write(ncin, output_file4)
