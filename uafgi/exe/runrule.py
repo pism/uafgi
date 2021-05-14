@@ -11,5 +11,7 @@ with open(sys.argv[1], 'rb') as fin:
 # Execute the rule
 with tdir_fn() as tdir:    # See ioutil.TmpDir
     print('=============================================================')
+    print('Command line: {}'.format(sys.argv))
     print('Running {}'.format(str(rule)))
+    sys.stdout.flush()
     rule.action(tdir)

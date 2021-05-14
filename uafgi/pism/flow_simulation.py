@@ -1,9 +1,9 @@
 import traceback
-import os
+import os,sys
 import numpy as np
 import pandas as pd
 import datetime
-from uafgi import argutil,gdalutil,glacier,bedmachine
+from uafgi import argutil,gdalutil,glacier,bedmachine,ncutil
 import uafgi.data
 from uafgi.pism import pismutil
 from uafgi.pism import calving0
@@ -25,7 +25,7 @@ blackout_names = {
 
 
 
-def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, dry_run=False, row=None, **pism_kwargs0):
+def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file_raw, tdir, dry_run=False, row=None, **pism_kwargs0):
     """Does a single PISM run
     ns481_grid:
         Name of the grid on which this runs (as per NSIDC-0481 dataset)
@@ -58,7 +58,7 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, 
 
     if dry_run:
         inputs = [grid_file, bedmachine_file0, velocity_file]
-        outputs = [output_file]
+        outputs = [output_file_raw]
         return inputs, outputs
 
     # ============================================
@@ -100,6 +100,7 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, 
     print('============ Running year {}'.format(year))
     output_file3 = tdir.filename()
     print('     ---> {}'.format(output_file3))
+    sys.stdout.flush()
 
     # Prepare to store the output file
 #    odir = os.path.split(output_file)[0]
@@ -112,6 +113,7 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, 
         # determines if after this call the file will contain
         # zero (append_time=False) or one (append_time=True)
         # records.
+        sys.stdout.flush()
         output = PISM.util.prepare_output(output_file3, append_time=False)
 
         # TODO: Add a time_units and calendar argument to prepare_output()
@@ -146,6 +148,7 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, 
 
         # Iterate through portions of (dt0,dt1) with constant velocities
         ice_velocity.read(velocity_file, itime)   # 0 ==> first record of that file (if time-dependent)
+        sys.stdout.flush()
         front_evolution(geometry, ice_velocity,
            t0_s, t1_s,
            output=output)
@@ -185,5 +188,5 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, year, output_file, tdir, 
                     raise
 
     # ------------------- Create final output file
-    os.makedirs(os.path.split(output_file)[0], exist_ok=True)
-    os.rename(output_file_tmp, output_file)
+    os.makedirs(os.path.split(output_file_raw)[0], exist_ok=True)
+    os.rename(output_file_tmp, output_file_raw)
