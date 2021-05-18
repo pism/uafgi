@@ -3,7 +3,7 @@ import os,sys
 import numpy as np
 import pandas as pd
 import datetime
-from uafgi import argutil,gdalutil,glacier,bedmachine,ncutil,glacier
+from uafgi import argutil,gdalutil,glacier,bedmachine,ncutil,make
 import uafgi.data
 from uafgi.pism import pismutil
 from uafgi.pism import calving0
@@ -220,7 +220,7 @@ def get_von_Mises_stress(ns481_grid, velocity_file, output_file, tdir, **kwargs)
     return run_pism(*args, **kwargs2)
 
 
-def compute_sigma(velocity_file, ns481_grid, ofname, tdir):
+def compute_sigma(velocity_file, ofname, tdir):
     """Computes sigma for ItsLIVE files
     velocity_file:
         Input file (result of merge_to_pism_rule()) with multiple timesteps
@@ -230,6 +230,7 @@ def compute_sigma(velocity_file, ns481_grid, ofname, tdir):
     # Create output file, based on input file
     with netCDF4.Dataset(velocity_file) as ncin:
         schema = ncutil.Schema(ncin)
+        ns481_grid = ncin.grid
 
         for vname in ('u_ssa_bc', 'v_ssa_bc', 'v'):
             del schema.vars[vname]
@@ -278,4 +279,21 @@ def compute_sigma(velocity_file, ns481_grid, ofname, tdir):
 
             ncout.variables['sigma'][itime,:] = glacier.von_mises_stress_eig(*eig)
 
-def compute_sigma_rule(
+def compute_sigma_rule(itslive_nc, odir):
+
+    """Runs the PISM compute-sigma calculation on a merged localized
+    ItsLIVE file.
+
+    itslive_nc:
+        Result of itslive.merge_to_pism_rule()
+    odir:
+        Directory to place results
+
+    """
+    ofname = make.opath(itslive_nc, odir, '_sigma')
+    def action(tdir):
+        compute_sigma(itslive_nc, ofname, tdir)
+    return make.Rule(action,
+        [itslive_nc], [ofname])
+
+
