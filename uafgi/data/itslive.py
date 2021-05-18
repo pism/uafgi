@@ -1,5 +1,5 @@
 import numpy as np
-from uafgi import ioutil,make,cdoutil
+from uafgi import ioutil,make,cdoutil,ncutil
 from cdo import Cdo
 import os
 import datetime
@@ -81,7 +81,7 @@ def process_year(ifname, year, grid_file, ofname, tdir):
     subprocess.run(cmd, check=True)
 
 
-def process_years(year_files, years, grid_file, allyear_file, tdir):
+def process_years(year_files, years, grid, grid_file, allyear_file, tdir):
     """Process multiple 1-year global Its-Live files into a single
     multi-year local file."""
 
@@ -98,6 +98,11 @@ def process_years(year_files, years, grid_file, allyear_file, tdir):
 
     cdoutil.merge(cdo.mergetime, oyear_files, allyear_file, tdir,
         options='-f nc4 -z zip_2')
+
+    # Add the grid as an attribute
+    with netCDF4.Dataset(allyear_file, 'a') as nc:
+        nc.grid = grid
+        nc.grid_file = grid_file
 
 
 def merge_to_pism_rule(grid, grid_file, ifpattern, years, odir):
@@ -122,8 +127,10 @@ def merge_to_pism_rule(grid, grid_file, ifpattern, years, odir):
         odir, '')
 
     def action(tdir):
-        process_years(iyear_files, years, grid_file,
+        process_years(iyear_files, years, grid, grid_file,
             allyear_file, tdir)
 
     return make.Rule(action,
         iyear_files + [grid_file], (allyear_file,))
+
+# ---------------------------------------------------------------------

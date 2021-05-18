@@ -210,7 +210,7 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, output_file, tdir, dry_ru
 
 
 def get_von_Mises_stress(ns481_grid, velocity_file, output_file, tdir, **kwargs):
-	"""Runs PISM just a baby amount, to get the von Mises stress on the first timestep."""
+    """Runs PISM just a baby amount, to get the von Mises stress on the first timestep."""
     args = (ns481_grid, None, velocity_file, output_file, tdir)
     kwargs2 = kwargs.copy()
     kwargs2['remove_downstream_ice'] = False    # Don't cut off any ice below the terminus
@@ -220,8 +220,7 @@ def get_von_Mises_stress(ns481_grid, velocity_file, output_file, tdir, **kwargs)
     return run_pism(*args, **kwargs2)
 
 
-
-def compute_sigma_itslive(velocity_file, ns481_grid, ofname, tdir):
+def compute_sigma(velocity_file, ns481_grid, ofname, tdir):
     """Computes sigma for ItsLIVE files
     velocity_file:
         Input file (result of merge_to_pism_rule()) with multiple timesteps
@@ -279,6 +278,4 @@ def compute_sigma_itslive(velocity_file, ns481_grid, ofname, tdir):
 
             ncout.variables['sigma'][itime,:] = glacier.von_mises_stress_eig(*eig)
 
-                        
-
-
+def compute_sigma_rule(

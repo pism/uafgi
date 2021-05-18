@@ -334,7 +334,7 @@ class Schema:
             schema1.copy(ncin1, ncout1)
 
     def write(self, ncin, ofname, var_kwargs=dict(zlib=True)):
-    	"""Create a new file and write the schema to it, copying from ncin"""
+        """Create a new file and write the schema to it, copying from ncin"""
         with netCDF4.Dataset(ofname, 'w') as ncout:
             # Create new vars, compressed.
             self.create(ncout, var_kwargs=var_kwargs)
