@@ -2,6 +2,7 @@ import re
 import cf_units
 from uafgi import ncutil
 import datetime
+import numpy as np
 
 def get_crs(cf_file):
     """Returns a PROJ CRS obtained from a CF-compliant NetCDF file.
@@ -33,7 +34,7 @@ def replace_reftime_unit(unit, relname='seconds'):
     return cf_units.Unit(relname+match.group(2), unit.calendar)
 
 
-def read_time(nc, vname):
+def read_time(nc, vname, units=None, calendar=None):
     """Reads a CF-compliant time variable and converts to Python datetime objects.
     nc: netCDF4.Dataset
         An open NetCDF file
@@ -43,11 +44,20 @@ def read_time(nc, vname):
         The times, converted to Python format.
     """
     nctime = nc.variables[vname]
-    return [
-        datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
-        for dt in
-        cf_units.Unit(nctime.units, calendar=nctime.calendar). \
-            num2date(nctime[:])]
+    if units is None:
+        units = nctime.units
+    if calendar is None:
+        calendar = nctime.calendar
+
+    ret = list()
+    n2d = cf_units.Unit(units, calendar=calendar).num2date(nctime[:])
+
+    # Convert from CFUnit datetime to standard Python datetime
+    ret = np.vectorize(
+        lambda dt: datetime.datetime(
+            dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
+        )(n2d)
+    return ret
 
 def convert(ncarray, from_unit, to_unit):
     """Converts physical units.  Convenience function.
