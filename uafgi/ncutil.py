@@ -21,7 +21,9 @@ import os
 import shutil
 import subprocess
 import contextlib
+import itertools
 from uafgi import gicollections
+import cf_units
 
 # Copy a netCDF file (so we can add more stuff to it)
 class copy_nc(object):
@@ -341,3 +343,44 @@ class Schema:
             # Copy vars
             self.copy(ncin, ncout)
 
+    def keep_only_vars(self, *keeps_args):
+        """Removes all vars from a schema EXCEPT those specified"""
+        dkeeps = set(itertools.chain.from_iterable(self.vars[v].dims for v in keeps_args))
+        print('Keep dims: {}'.format(dkeeps))
+        vkeeps = set(keeps_args)
+        self.vars = dict((k,v) for k,v in self.vars.items() if k in vkeeps)
+        self.dims = dict((k,v) for k,v in self.dims.items() if k in dkeeps)
+
+# ------------------------------------------------
+class convert_to:
+    """Wrap a NCVar in this, and it will conver to different units."""
+    def __init__(self, ncvar, sunit, src=None):
+        if isinstance(sunit, str):
+            self.external_units = cf_units.Unit(sunit)
+        else:
+            self.external_units = sunit
+
+        self.ncvar = ncvar
+
+        if src is None:
+            self.internal_units = cf_units.Unit(ncvar.units)
+        elif isinstance(src, str):
+            self.internal_units = cf_units.Unit(src)
+        else:
+            self.internal_units = src
+
+
+    def __getitem__(self, *args):
+        val = self.ncvar.__getitem__(*args)
+        # Convert internal to external units
+        return self.internal_units.convert(val, self.external_units)
+
+    def __setitem__(self, ix, val):
+        # Convert external to internal units
+        cval = self.external_units.convert(val, self.internal_units)
+        return self.__setitem__(ix, cval)
+
+def convert_var(nc, vname, sunit, **kwargs):
+    """Convenience function to make variable wrapper"""
+    return convert_to(nc.variables[vname], sunit, **kwargs)
+        
