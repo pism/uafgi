@@ -215,7 +215,7 @@ def get_von_Mises_stress(ns481_grid, velocity_file, output_file, tdir, **kwargs)
     kwargs2 = kwargs.copy()
     kwargs2['remove_downstream_ice'] = False    # Don't cut off any ice below the terminus
     kwargs2['dt_s'] = 100.                     # Run only briefly
-    kwargs2['delete_vars'] = {'ice_area_specific_volume', 'thk', 'mask', 'total_retreat_rate', 'flux_divergence'}
+    kwargs2['delete_vars'] = {'ice_area_specific_volume', 'thk', 'total_retreat_rate', 'flux_divergence'}
 
     return run_pism(*args, **kwargs2)
 
@@ -249,6 +249,9 @@ def compute_sigma(velocity_file, ofname, tdir):
         for ix in (0,1):
             ncv = ncout.createVariable(f'strain_rates_{ix}', 'd', ('time', 'y', 'x'), **var_kwargs)
             ncv.long_name = f'Eigenvalue #{ix} of strain rate, used to compute von Mises stress; see glacier.von_mises_stress_eig()'
+        ncv = ncout.createVariable('mask', 'i', ('time', 'y', 'x'), **var_kwargs)
+        ncv.long_name = 'PISM Mask'
+        ncv.description = '0=bare ground; 2=grounded ice; 3=floating ice; 4=open water'
         ncv = ncout.createVariable(f'sigma', 'd', ('time', 'y', 'x'), **var_kwargs)
         ncv.long_name = 'von Mises Stress'
         ncv.description = 'Computed using glacier.von_mises_stress_eig()'
@@ -258,7 +261,8 @@ def compute_sigma(velocity_file, ofname, tdir):
 
     # Generate sigmas for each timestep
     for itime in range(ntime):
-        of_tmp = tdir.filename()
+        #of_tmp = tdir.filename()
+        of_tmp = './tmp.nc'
         get_von_Mises_stress(
             ns481_grid, velocity_file,
             of_tmp, tdir,
@@ -277,7 +281,9 @@ def compute_sigma(velocity_file, ofname, tdir):
                     ncv = ncout.variables['strain_rates_{}'.format(ix)]
                     ncv[itime,:] = L
 
-            ncout.variables['sigma'][itime,:] = glacier.von_mises_stress_eig(*eig)
+                ncout.variables['sigma'][itime,:] = glacier.von_mises_stress_eig(*eig)
+
+                ncout.variables['mask'][itime,:] = ncin.variables['mask'][0,:]
 
 def compute_sigma_rule(itslive_nc, odir):
 
