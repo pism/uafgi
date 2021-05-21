@@ -163,6 +163,11 @@ def read_termini(map_wkt):
     df = df.rename(columns={'_shape':'terminus'}) \
         .drop(['_shape0'], axis=1)
 
+    # Add a date column
+    print(df.columns)
+    df['date'] = df[['Year', 'Month', 'Day']].apply(
+        lambda x: datetime.datetime(*x), axis=1)
+
     return pdutil.ext_df(df, map_wkt,
         add_prefix='w21t_',
         keycols=['Glacier', 'Year', 'Day_of_Yea'])
