@@ -5,8 +5,9 @@ import os
 import datetime
 import subprocess
 import netCDF4
+import re
 
-def process_year(ifname, year, grid_file, ofname, tdir):
+def process_year(ifname, time_bounds, grid_file, ofname, tdir):
     """Extracts a local region from a single-year ItsLive file.
     Does some additional fixups as well.
 
@@ -22,22 +23,27 @@ def process_year(ifname, year, grid_file, ofname, tdir):
         Temporary directory
     """
 
+    # Remove non-date portion of time_bounds
+    # (CDO doesn't like it on -setreftime)
+    time_bounds = [x if isinstance(x,datetime.date) else x.date() for x in time_bounds]
+
     cdo = Cdo()
     odir = os.path.split(ofname)[0]
 
     # Extract each variable separately
     merge_files = list()
-    for vname in ('vx', 'vy', 'v'):
+    for vname in ('VX', 'VY'):
 
         # Use GDAL to extract just local region
         tmp_v1 = tdir.filename() + '.nc'
-        print('tmp_v1 = {}'.format(tmp_v1))
         cdoutil.extract_region_onevar(ifname, grid_file, vname, tmp_v1)
 
         # Add time
         tmp_v2 = tdir.filename() + '.nc'
-        time_bounds = (datetime.datetime(year,1,1), datetime.datetime(year,12,31))
-        reftime = datetime.date(year,1,1)
+
+#        time_bounds = (datetime.datetime(year,1,1), datetime.datetime(year,12,31))
+#        reftime = datetime.date(year,1,1)
+        reftime = (time_bounds[0] + (time_bounds[1] - time_bounds[0]) / 2).date()
         cdoutil.set_time_axis(tmp_v1, tmp_v2, time_bounds, reftime)
 
 
@@ -76,12 +82,13 @@ def process_year(ifname, year, grid_file, ofname, tdir):
     # succeed even when no such variable is in the file.
     # tmp_v3 = make.opath(ofname, tdir, '_{}2.nc'.format(vname))
     tmp_v3 = tdir.opath(ofname, '_{}2.nc'.format(vname))
-    cmd = ['ncrename', '-O', '-v', '.vx,u_ssa_bc', '-v', '.vy,v_ssa_bc',
+    cmd = ['ncrename', '-O', '-v', '.VX,u_ssa_bc', '-v', '.VY,v_ssa_bc',
         tmp4, ofname]
     subprocess.run(cmd, check=True)
 
-
-def process_years(year_files, years, grid, grid_file, allyear_file, tdir):
+ 
+#fileRE = re.compile(r'vel_(\d\d\d\d)_(\d\d)_(\d\d)_(\d\d\d\d)_(\d\d)_(\d\d).nc')
+def process_years(year_files, time_bndss, grid, grid_file, allyear_file, tdir):
     """Process multiple 1-year global Its-Live files into a single
     multi-year local file."""
 
@@ -90,10 +97,10 @@ def process_years(year_files, years, grid, grid_file, allyear_file, tdir):
     odir = os.path.split(allyear_file)[0]
     oyear_files = list()
 
-    for ifname,year in zip(year_files,years):
-        ofname = tdir.join('year_{:04}.nc'.format(year))
+    for ifname,time_bnds in zip(year_files,time_bndss):
+        ofname = tdir.filename()
         print('ofname = {}'.format(ofname))
-        process_year(ifname, year, grid_file, ofname, tdir)
+        process_year(ifname, time_bnds, grid_file, ofname, tdir)
         oyear_files.append(ofname)
 
     cdoutil.merge(cdo.mergetime, oyear_files, allyear_file, tdir,
@@ -105,7 +112,7 @@ def process_years(year_files, years, grid, grid_file, allyear_file, tdir):
         nc.grid_file = grid_file
 
 
-def merge_to_pism_rule(grid, grid_file, ifpattern, years, odir):
+def merge_to_pism_rule(grid, grid_file, ifpattern, range_dt0, range_dt1, odir):
     """Merges a bunch of Its-Live files while extracting a local region from them.
 
     grid:
@@ -119,15 +126,51 @@ def merge_to_pism_rule(grid, grid_file, ifpattern, years, odir):
     """
 
     # ---------- Prepare the rule
-    iyear_files = [
-        ifpattern.format('{:04}'.format(year))
-        for year in years]
+    fileRE = re.compile(r'vel_(\d\d\d\d)-(\d\d)-(\d\d)_(\d\d\d\d)-(\d\d)-(\d\d).nc')
+    iyear_filesx = []
+    ifdir = os.path.split(ifpattern)[0]
+    for leaf in os.listdir(ifdir):
+        match = fileRE.match(leaf)
+        if match is None:
+            continue
+
+        dt0 = datetime.datetime(
+            int(match.group(1)),
+            int(match.group(2)),
+            int(match.group(3)))
+        dt1 = datetime.datetime(
+            int(match.group(1))+1,
+            int(match.group(2)),
+            int(match.group(3)))
+
+
+#        print([match.group(i) for i in range(1,7)])
+
+        # The filename has illegal date: yyyy-06-31
+        #dt1 = datetime.datetime(
+        #    int(match.group(4)),
+        #    int(match.group(5)),
+        #    int(match.group(6))) \
+        #    + datetime.timedelta(days=1)
+
+        # Make sure it's in range
+        if (dt1 <= range_dt0) or (dt0 >= range_dt1):
+            continue
+
+        iyear_filesx.append(( (dt0,dt1), os.path.join(ifdir,leaf) ))
+
+    iyear_filesx.sort()
+#    iyear_filesx = iyear_filesx[:2]    # TODO: Debugging
+
+    time_bndss =  [x[0] for x in iyear_filesx]
+    iyear_files = [x[1] for x in iyear_filesx]
+
     allyear_file = make.opath(
-        ifpattern.format('{}_{:04}_{:04}'.format(grid, years[0],years[-1])),
+        ifpattern.format('{}_{:04}_{:04}'.format(grid, range_dt0.year, range_dt1.year)),
         odir, '')
 
     def action(tdir):
-        process_years(iyear_files, years, grid, grid_file,
+        process_years(iyear_files, time_bndss, grid, grid_file,
             allyear_file, tdir)
 
     return make.Rule(action,
