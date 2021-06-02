@@ -233,7 +233,8 @@ def compute_sigma(velocity_file, ofname, tdir):
         ns481_grid = ncin.grid
 
         for vname in ('u_ssa_bc', 'v_ssa_bc', 'v'):
-            del schema.vars[vname]
+            if vname in schema.vars:
+                del schema.vars[vname]
 
         ntime = len(ncin.dimensions['time'])
         #nc481_grid = ncin.ns481_grid
