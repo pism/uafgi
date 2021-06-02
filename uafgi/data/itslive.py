@@ -6,8 +6,9 @@ import datetime
 import subprocess
 import netCDF4
 import re
+import uafgi.data
 
-def process_year(ifname, time_bounds, grid_file, ofname, tdir):
+def process_year(ifname, VXY, time_bounds, grid_file, ofname, tdir):
     """Extracts a local region from a single-year ItsLive file.
     Does some additional fixups as well.
 
@@ -32,7 +33,9 @@ def process_year(ifname, time_bounds, grid_file, ofname, tdir):
 
     # Extract each variable separately
     merge_files = list()
-    for vname in ('VX', 'VY'):
+    VX,VY = VXY
+    zerofill = False
+    for vname in VXY:    # ('VX', 'VY')
 
         # Use GDAL to extract just local region
         tmp_v1 = tdir.filename() + '.nc'
@@ -62,9 +65,13 @@ def process_year(ifname, time_bounds, grid_file, ofname, tdir):
             # Date:   Wed Oct 14 11:21:18 2020 -0800
             #     Stop PISM if a variable in an input file has missing values    
             #     We check if some values of a variable match the _FillValue attribute.
+            fv = ncv._FillValue
+            if fv == 0:
+                fv = -32767
+
+            # Change FillValue -> 0
             val = ncv[:].data    # NetCDF reads a masked array
-            print('FillValueX ',ncv._FillValue, np.sum(np.sum(val==ncv._FillValue)))
-            val[val==ncv._FillValue] = 0
+            val[val==fv] = 0
             ncv[:] = val
 
         # Add to files to merge
@@ -75,20 +82,38 @@ def process_year(ifname, time_bounds, grid_file, ofname, tdir):
     print('******** Merging {} -> {}'.format(merge_files, ofname))
     cdoutil.merge(cdo.merge, merge_files, tmp4, tdir)
 
-    # Rename variables to what PISM expects
+    # Rename variables to what PISM expects; while "filling" missing values with 0
     # HINT: If presence is intended to be optional, then prefix
     # old variable name with the period character '.', i.e.,
     # 'ncrename -v .vy,v_ssa_bc'. With this syntax ncrename would
     # succeed even when no such variable is in the file.
     # tmp_v3 = make.opath(ofname, tdir, '_{}2.nc'.format(vname))
-    tmp_v3 = tdir.opath(ofname, '_{}2.nc'.format(vname))
-    cmd = ['ncrename', '-O', '-v', '.VX,u_ssa_bc', '-v', '.VY,v_ssa_bc',
-        tmp4, ofname]
-    subprocess.run(cmd, check=True)
+    ovnames = ('u_ssa_bc', 'v_ssa_bc')
+    with netCDF4.Dataset(tmp4) as ncin:
+        schema = ncutil.Schema(ncin)
+        for ivname,ovname in zip(VXY,ovnames):
+            sv = schema.rename(ivname, ovname)
+            for attr in ('_FillValue', 'missing_value'):
+                if attr in sv.attrs:
+                    del sv.attrs[attr]
 
+        with netCDF4.Dataset(ofname, 'w') as ncout:
+            schema.create(ncout)
+
+            for ovname in ovnames:
+                del schema.vars[ovname]
+            schema.copy(ncin, ncout)
+
+            for ivname,ovname in zip(VXY,ovnames):
+                ncv = ncin.variables[ivname]
+                fv = ncv._FillValue
+                if fv == 0:
+                    fv = -32767
+
+                val = ncv[:].data
+                ncout.variables[ovname][:] = val
  
-#fileRE = re.compile(r'vel_(\d\d\d\d)_(\d\d)_(\d\d)_(\d\d\d\d)_(\d\d)_(\d\d).nc')
-def process_years(year_files, time_bndss, grid, grid_file, allyear_file, tdir):
+def process_years(year_files, VXY, time_bndss, grid, grid_file, allyear_file, tdir):
     """Process multiple 1-year global Its-Live files into a single
     multi-year local file."""
 
@@ -100,7 +125,7 @@ def process_years(year_files, time_bndss, grid, grid_file, allyear_file, tdir):
     for ifname,time_bnds in zip(year_files,time_bndss):
         ofname = tdir.filename()
         print('ofname = {}'.format(ofname))
-        process_year(ifname, time_bnds, grid_file, ofname, tdir)
+        process_year(ifname, VXY, time_bnds, grid_file, ofname, tdir)
         oyear_files.append(ofname)
 
     cdoutil.merge(cdo.mergetime, oyear_files, allyear_file, tdir,
@@ -112,27 +137,18 @@ def process_years(year_files, time_bndss, grid, grid_file, allyear_file, tdir):
         nc.grid_file = grid_file
 
 
-def merge_to_pism_rule(grid, grid_file, ifpattern, range_dt0, range_dt1, odir):
-    """Merges a bunch of Its-Live files while extracting a local region from them.
 
-    grid:
-        Name of the local grid to which data are to be regridded
-    grid_file:
-        Sample NetCDF file with the details of grid
-    ifpattern:
-        Eg, 'data/itslive/GRE_G0240_{}.nc' where {}=year
-    years: iterable(int)
-        Years to process
-    """
+class W21Merger:
+	"""Input for merge_to_pism_rule() to process Wood 2021 velocity files."""
+    RE = re.compile(r'vel_(\d\d\d\d)-(\d\d)-(\d\d)_(\d\d\d\d)-(\d\d)-(\d\d)\.nc')
+    VXY = ('VX', 'VY')
+    idir = uafgi.data.join('wood2021', 'velocities')
 
-    # ---------- Prepare the rule
-    fileRE = re.compile(r'vel_(\d\d\d\d)-(\d\d)-(\d\d)_(\d\d\d\d)-(\d\d)-(\d\d).nc')
-    iyear_filesx = []
-    ifdir = os.path.split(ifpattern)[0]
-    for leaf in os.listdir(ifdir):
-        match = fileRE.match(leaf)
+    @staticmethod
+    def parse(leaf):
+        match = W21Merger.RE.match(leaf)
         if match is None:
-            continue
+            return None
 
         dt0 = datetime.datetime(
             int(match.group(1)),
@@ -143,34 +159,84 @@ def merge_to_pism_rule(grid, grid_file, ifpattern, range_dt0, range_dt1, odir):
             int(match.group(2)),
             int(match.group(3)))
 
+        return dt0,dt1
 
-#        print([match.group(i) for i in range(1,7)])
+    @staticmethod
+    def ofname(grid, dt0, dt1):
+        return uafgi.data.join_outputs(
+            'wood2021', 'velocities',
+            'vel_{}_{:04}_{:04}.nc'.format(grid, dt0, dt1))
 
-        # The filename has illegal date: yyyy-06-31
-        #dt1 = datetime.datetime(
-        #    int(match.group(4)),
-        #    int(match.group(5)),
-        #    int(match.group(6))) \
-        #    + datetime.timedelta(days=1)
+
+class ItsliveMerger:
+	"""Snap-in for merge_to_pism_rule() to process Its LIVE velocity files."""
+
+    # What the input data filenames look like
+    RE = re.compile(r'GRE_G0240_(\d\d\d\d)\.nc')
+    # Name of ice velocities variables in the data files
+    VXY = ('vx', 'vy')
+    # Where the foind the input data files
+    idir = uafgi.data.join('itslive')
+
+    @staticmethod
+    def parse(leaf):
+        """Parse a date range out of a filename; or discard (None) as not part
+        of this dataset."""
+        match = ItsliveMerger.RE.match(leaf)
+        if match is None:
+            return None
+
+        dt0 = datetime.datetime(int(match.group(1)), 1,1)    # Jan 1, <year>
+        dt1 = datetime.datetime(int(match.group(1))+1, 1,1)    # Jan 1, <next year>
+
+        return dt0,dt1
+
+    @staticmethod
+    def ofname(grid, year0, year1):
+        """The output filename"""
+        return uafgi.data.join_outputs(
+            'itslive', 'GRE_G0240_{}_{}_{}.nc'.format(grid, year0, year1-1))
+
+
+
+def merge_to_pism_rule(grid, Merger, range_dt0, range_dt1):
+    """Merges a bunch of Its-Live or Wood 2021 velocity files while extracting a local region from them.
+    Produces one multi-year file, selected for the given grid.
+
+    grid:
+        Name of the local grid to which data are to be regridded
+    Merger:
+        Either W21Merger (Wood 2021 velocity files) or ItsliveMerger (Its LIVE velocity files)
+        ...depending on which kind of file is being processed.
+    range_dt0, range_dt1:
+        Date range within which to process input files.
+    """
+
+    grid_file = uafgi.data.measures_grid_file(grid)
+
+    # ---------- Prepare the rule
+    iyear_filesx = []
+    for leaf in os.listdir(Merger.idir):
+        parse = Merger.parse(leaf)
+        if parse is None:
+            continue
+        dt0,dt1 = parse
 
         # Make sure it's in range
         if (dt1 <= range_dt0) or (dt0 >= range_dt1):
             continue
 
-        iyear_filesx.append(( (dt0,dt1), os.path.join(ifdir,leaf) ))
+        iyear_filesx.append(( (dt0,dt1), os.path.join(Merger.idir,leaf) ))
 
     iyear_filesx.sort()
-#    iyear_filesx = iyear_filesx[:2]    # TODO: Debugging
 
     time_bndss =  [x[0] for x in iyear_filesx]
     iyear_files = [x[1] for x in iyear_filesx]
 
-    allyear_file = make.opath(
-        ifpattern.format('{}_{:04}_{:04}'.format(grid, range_dt0.year, range_dt1.year)),
-        odir, '')
+    allyear_file = Merger.ofname(grid, range_dt0.year, range_dt1.year)
 
     def action(tdir):
-        process_years(iyear_files, time_bndss, grid, grid_file,
+        process_years(iyear_files, Merger.VXY, time_bndss, grid, grid_file,
             allyear_file, tdir)
 
     return make.Rule(action,
