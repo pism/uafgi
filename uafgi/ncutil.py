@@ -299,6 +299,20 @@ class Schema:
         self.vars = {name: _var_schema(ncvar) for name,ncvar in ncin.variables.items()}
         self.attrs = {name: ncin.getncattr(name) for name in ncin.ncattrs()}
         self.groups = {name: Schema(val) for name,val in ncin.groups.items()}
+        self.renames = {k:k for k in self.vars.keys()}
+
+    def rename(self, ivname, ovname):
+        """Rename a variable in a schema.  Sets up to copy form old var to new.
+        ivname:
+        	Variable name in the original schema.
+        ovname:
+        	Name we want to give the variable in the output."""
+        sv = self.vars[ivname]
+        del self.vars[ivname]
+        self.vars[ovname] = sv
+        self.renames[ovname] = ivname
+        return sv
+
 
     def create(self, ncout, var_kwargs=dict(zlib=True)):
         """Creates this schema in a new NetCDF file"""
@@ -326,8 +340,10 @@ class Schema:
         """Copies this schema from ncin to ncout.
         create() must have already been run."""
 
-        for vname in self.vars.keys():
-            ncout.variables[vname][:] = ncin.variables[vname][:]
+        # Copy variables; renaming as needed.
+        for ovname in self.vars.keys():
+            ivname = self.renames[ovname]
+            ncout.variables[ovname][:] = ncin.variables[ivname][:]
 
         # Copy groups
         for name,schema1 in self.groups.items():
