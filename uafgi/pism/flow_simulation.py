@@ -3,12 +3,14 @@ import os,sys
 import numpy as np
 import pandas as pd
 import datetime
-from uafgi import argutil,gdalutil,glacier,bedmachine,ncutil,make
+from uafgi import argutil,gdalutil,glacier,bedmachine,ncutil,make,cfutil
 import uafgi.data
 from uafgi.pism import pismutil
 from uafgi.pism import calving0
 import netCDF4
 import PISM
+import shapely.geometry
+import traceback
 
 blackout_types = {
     ('shapely.geometry.multipoint', 'MultiPoint'),
@@ -303,4 +305,151 @@ def compute_sigma_rule(itslive_nc, odir):
     return make.Rule(action,
         [itslive_nc], [ofname])
 
+# ===============================================================
+def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, fjord_width, itslive_nc=None):
+    """
+    grid:
+        Name of local grid to use (eg: W69.10N)
+    fjord: np.array bool
+        True where there is fjord (or glacier grounded below sea level)
+        NOTE: This is as read by GDAL; may be flipped up/down from other arrays.
+    up_loc: Shapely Point
+        A point on the glacier, upstream of the terminus.
+        NOTE: This is as read by GDAL, to fit into fjord array.
+    terminus: Shapely Line
+        The glacier terminus (used to cut glacier)
+    itslive_nc_tpl:
+        Template to give the Velocities file to use.
+    uu, vv: np.arry [m s-1]
+        Flow we're integrating
+    mask: np.array
+        PISM mask
+    fjord_width:  [m]
+        Mean width of fjord
+    itslive_nc: str (OPTIONAL)
+        Name of input velocities file
+        If set, used only for debugging
+    """
+
+
+    # Determine the fjord
+    grid_info = gdalutil.FileInfo(uafgi.data.measures_grid_file(grid))
+
+    # Cut off the fjord at our terminus
+    fjc_gd = glacier.classify_fjord(fjord_gd, grid_info, up_loc_gd, terminus)
+    fjc = np.flipud(fjc_gd)    # fjord was originally read by gdal, it is flipped u/d
+    fjord = np.isin(fjc, glacier.ALL_FJORD)
+
+
+    # Update the PISM map to reflect cut-off fjord.
+    #ICE_TYPES = (pismutil.MASK_GROUNDED, pismutil.MASK_FLOATING)
+    kill_mask = np.logical_and(np.isin(mask, pismutil.MULTIMASK_ICE), fjc==glacier.LOWER_FJORD)
+    mask[kill_mask] = pismutil.MASK_ICE_FREE_OCEAN
+
+    kill_mask = (mask == pismutil.MASK_ICE_FREE_OCEAN)
+    uu[kill_mask] = 0
+    vv[kill_mask] = 0
+
+    # Compute flux across the boundary (and length of the boundary)
+    flux = pismutil.flux_across_terminus(mask, fjord, uu, vv, grid_info.dx, grid_info.dy)
+
+    # ------------------------------------------------------------------------
+    if itslive_nc is not None:
+        with netCDF4.Dataset(itslive_nc) as ncin:
+            schema = ncutil.Schema(ncin)
+            schema.keep_only_vars('x', 'y')
+
+            with netCDF4.Dataset('z.nc', 'w') as ncout:
+                schema.create(ncout, var_kwargs={'zlib': True})
+                for vname in ('fjc', 'fjord', 'mask', 'uu', 'vv', 'flux'):
+                    ncout.createVariable(vname, 'd', ('y','x'))
+                schema.copy(ncin, ncout)
+                ncout.variables['fjc'][:] = fjc[:]
+                ncout.variables['fjord'][:] = fjord[:]
+                ncout.variables['mask'][:] = mask[:]
+                ncout.variables['uu'][:] = uu[:]
+                ncout.variables['vv'][:] = vv[:]
+                ncout.variables['flux'][:] = flux[:]
+    # ------------------------------------------------------------------------
+
+    tflux = np.sum(flux)
+    aflux = (tflux / fjord_width) * (365 * 86400.)   # m/a
+    print('Flux: {} m^2/s = {} m/a'.format(tflux, aflux))
+
+    return aflux
+
+
+
+def flow_rate2(row, w21t, Merger, year0, year1):
+    """
+    row:
+        Row from the "select" dataframe of our glaciers of interest.
+    w21t:
+        Available termini for all glaciers.
+         = uafgi.data.w21.read_termini(uafgi.data.wkt.nsidc_ps_north).df
+    Merger: itslive.[ItsliveMerger/W21Merger]
+        Which type of velocity file we'll use
+    year0, year1:
+        Year range.  Must match names of velocity files.
+    """
+    orows = list()
+
+    grid = row['ns481_grid']
+    fjord_gd = np.isin(row['fjord_classes'], glacier.ALL_FJORD)    # _gd == "as read by GDAL"
+    up_loc_gd = row['up_loc']
+
+    # Get termini for that
+    w21tx = w21t[w21t['w21t_Glacier'] == row['w21t_Glacier']].sort_values(['w21t_date'])
+
+
+    itslive_nc = Merger.ofname(grid, year0, year1)
+    sigma_nc = os.path.splitext(itslive_nc)[0] + '_sigma.nc'
+
+    with netCDF4.Dataset(itslive_nc) as nc:
+        time = cfutil.read_time(nc, 'time')
+        nct = nc.variables['time']
+        time_bnds = cfutil.read_time(nc, 'time_bnds',
+            units=nct.units, calendar=nct.calendar)
+
+        # Fix end of range in Its-Live
+        time_bnds[:,1] += Merger.time_bnds_adjust
+
+    for target_year in range(year0, year1):
+        try:
+            target_dt = datetime.datetime(target_year, 9, 1)
+
+            # Figure out time index in velocity file
+            for itime_itslive in range(time_bnds.shape[0]):
+                if target_dt >= time_bnds[itime_itslive,0] and target_dt < time_bnds[itime_itslive,1]:
+                    break
+
+            # Read velocity components
+            with netCDF4.Dataset(itslive_nc) as nc:
+                uu = ncutil.convert_var(nc, 'u_ssa_bc', 'm s-1')[itime_itslive,:]
+                vv = ncutil.convert_var(nc, 'v_ssa_bc', 'm s-1')[itime_itslive,:]
+
+            # Read sigma
+            with netCDF4.Dataset(sigma_nc) as nc:
+                sigma = nc.variables['sigma'][itime_itslive,:]
+                mask = nc.variables['mask'][itime_itslive,:]
+
+                fjord_width = row['w21_mean_fjord_width'] * 1000.    # Data in km
+
+
+            # Figure out terminus trace closest to target date
+            df = w21tx.copy()
+            df['dtdiff'] = df['w21t_date'].apply(lambda dt: abs((dt - target_dt).total_seconds()))
+            terminus_row = df.loc[df['dtdiff'].idxmin()]
+            terminus = terminus_row.w21t_terminus
+
+
+            aflux = flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, fjord_width, itslive_nc=itslive_nc)
+
+            orow = {'w21t_key': row['w21t_key'], 'year': target_year, 'velocity_source': Merger.__name__, 'aflux': aflux}
+            orows.append(orow)
+        except:
+            traceback.print_exc()
+            pass
+
+    return pd.DataFrame(data=orows)
 

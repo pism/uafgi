@@ -139,10 +139,12 @@ def process_years(year_files, VXY, time_bndss, grid, grid_file, allyear_file, td
 
 
 class W21Merger:
-	"""Input for merge_to_pism_rule() to process Wood 2021 velocity files."""
+    """Input for merge_to_pism_rule() to process Wood 2021 velocity files."""
     RE = re.compile(r'vel_(\d\d\d\d)-(\d\d)-(\d\d)_(\d\d\d\d)-(\d\d)-(\d\d)\.nc')
     VXY = ('VX', 'VY')
     idir = uafgi.data.join('wood2021', 'velocities')
+    # How to adjust time_bnds end of range
+    time_bnds_adjust = datetime.timedelta(days=0)
 
     @staticmethod
     def parse(leaf):
@@ -169,7 +171,7 @@ class W21Merger:
 
 
 class ItsliveMerger:
-	"""Snap-in for merge_to_pism_rule() to process Its LIVE velocity files."""
+    """Snap-in for merge_to_pism_rule() to process Its LIVE velocity files."""
 
     # What the input data filenames look like
     RE = re.compile(r'GRE_G0240_(\d\d\d\d)\.nc')
@@ -177,6 +179,8 @@ class ItsliveMerger:
     VXY = ('vx', 'vy')
     # Where the foind the input data files
     idir = uafgi.data.join('itslive')
+    # How to adjust time_bnds end of range
+    time_bnds_adjust = datetime.timedelta(days=1)
 
     @staticmethod
     def parse(leaf):

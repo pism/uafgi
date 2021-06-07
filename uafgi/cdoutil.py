@@ -5,6 +5,7 @@ import netCDF4
 import cf_units
 import subprocess
 from uafgi import functional,cfutil,gdalutil
+import datetime
 
 """Utilities for working with the Python CDO interface"""
 def _large_merge(cdo_merge_operator, input, output, tdir, max_merge=30, **kwargs):
@@ -65,6 +66,8 @@ def set_time_axis(ifname, ofname, time_bounds, reftime):
     """Adds time to a NetCDF file; allows for later use with cdo.merge"""
     cdo = Cdo()
 
+
+#TODO: Re-do this so it actually works, just use my ncutil.Schema
 
     # Set the time axis
     inputs = [
