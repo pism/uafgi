@@ -306,7 +306,7 @@ def compute_sigma_rule(itslive_nc, odir):
         [itslive_nc], [ofname])
 
 # ===============================================================
-def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, fjord_width, itslive_nc=None):
+def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, fjord_width, itslive_nc=None, debug_out_nc=None):
     """
     grid:
         Name of local grid to use (eg: W69.10N)
@@ -359,7 +359,7 @@ def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, fjord_width, it
             schema = ncutil.Schema(ncin)
             schema.keep_only_vars('x', 'y')
 
-            with netCDF4.Dataset('z.nc', 'w') as ncout:
+            with netCDF4.Dataset(debug_out_nc, 'w') as ncout:
                 schema.create(ncout, var_kwargs={'zlib': True})
                 for vname in ('fjc', 'fjord', 'mask', 'uu', 'vv', 'flux'):
                     ncout.createVariable(vname, 'd', ('y','x'))
@@ -374,7 +374,7 @@ def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, fjord_width, it
 
     tflux = np.sum(flux)
     aflux = (tflux / fjord_width) * (365 * 86400.)   # m/a
-    print('Flux: {} m^2/s = {} m/a'.format(tflux, aflux))
+#    print('Flux: {} m^2/s = {} m/a'.format(tflux, aflux))
 
     return aflux
 
@@ -438,14 +438,24 @@ def flow_rate2(row, w21t, Merger, year0, year1):
 
             # Figure out terminus trace closest to target date
             df = w21tx.copy()
+            if len(df) == 0:
+                continue
+
             df['dtdiff'] = df['w21t_date'].apply(lambda dt: abs((dt - target_dt).total_seconds()))
             terminus_row = df.loc[df['dtdiff'].idxmin()]
             terminus = terminus_row.w21t_terminus
 
+            # Compute velocity flux
+            aflux = flow_rate(grid, fjord_gd, up_loc_gd, terminus,
+                uu, vv,
+                mask, fjord_width, itslive_nc=itslive_nc, debug_out_nc='debug_aflux.nc')
 
-            aflux = flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, fjord_width, itslive_nc=itslive_nc)
+            # Compute sigma flux
+            sflux = flow_rate(grid, fjord_gd, up_loc_gd, terminus,
+                uu*sigma, vv*sigma,
+                mask, fjord_width, itslive_nc=itslive_nc, debug_out_nc='debug_sflux.nc')
 
-            orow = {'w21t_key': row['w21t_key'], 'year': target_year, 'velocity_source': Merger.__name__, 'aflux': aflux}
+            orow = {'w21t_key': row['w21t_key'], 'year': target_year, 'velocity_source': Merger.__name__, 'aflux': aflux, 'sflux': sflux}
             orows.append(orow)
         except:
             traceback.print_exc()
