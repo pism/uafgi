@@ -164,7 +164,7 @@ def read_termini(map_wkt):
         .drop(['_shape0'], axis=1)
 
     # Add a date column
-    print(df.columns)
+#    print(df.columns)
     df['date'] = df[['Year', 'Month', 'Day']].apply(
         lambda x: datetime.datetime(*x), axis=1)
 
@@ -445,7 +445,7 @@ def glacier_rate_df(data_fname):
 
 
         # Add to dataframe we're constructing
-        print(qname, values2.shape)
+#        print(qname, values2.shape)
         cols[qname] = values2
 
 

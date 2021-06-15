@@ -362,7 +362,7 @@ class Schema:
     def keep_only_vars(self, *keeps_args):
         """Removes all vars from a schema EXCEPT those specified"""
         dkeeps = set(itertools.chain.from_iterable(self.vars[v].dims for v in keeps_args))
-        print('Keep dims: {}'.format(dkeeps))
+#        print('Keep dims: {}'.format(dkeeps))
         vkeeps = set(keeps_args)
         self.vars = dict((k,v) for k,v in self.vars.items() if k in vkeeps)
         self.dims = dict((k,v) for k,v in self.dims.items() if k in dkeeps)
