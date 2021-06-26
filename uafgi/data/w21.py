@@ -168,10 +168,19 @@ def read_termini(map_wkt):
     df['date'] = df[['Year', 'Month', 'Day']].apply(
         lambda x: datetime.datetime(*x), axis=1)
 
-    return pdutil.ext_df(df, map_wkt,
+
+    # Determine Wood 21 glacier_number ID by the ordering in the original file
+    gndf = df[['Glacier']]
+    gndf = gndf.drop_duplicates().reset_index(drop=True)
+    gndf['glacier_number'] = gndf.index + 1
+
+    # Join main df with glacier numbers
+    df = pdutil.merge_nodups(df, gndf, on='Glacier', how='left')
+
+    w21t = pdutil.ext_df(df, map_wkt,
         add_prefix='w21t_',
         keycols=['Glacier', 'Year', 'Day_of_Yea'])
-
+    return w21t
 
 def termini_by_glacier(w21t):
     """Collects rows from original read_termini() DataFrame by Glacier Name.
