@@ -156,23 +156,39 @@ def read(map_wkt):
         namecols=['popular_name', 'greenlandic_name'])
 
 
-def read_termini(map_wkt):
+@functional.memoize
+def raw_termini(map_wkt):
     df=pd.DataFrame(shputil.read(
         uafgi.data.join('wood2021', 'Greenland_Glacier_Ice_Front_Positions.shp'),
         read_shapes=True, wkt=map_wkt))
     df = df.rename(columns={'_shape':'terminus'}) \
         .drop(['_shape0'], axis=1)
+    return df
+
+
+def glacier_key(map_wkt):
+    """Returns a mapping between Glacier and glacier_number;
+    (two kinds of keys in Wood et al 2021)"""
+
+    df = raw_termini(map_wkt)
+
+    # Determine Wood 21 glacier_number ID by the ordering in the original file
+    gndf = df[['Glacier']]
+    gndf = gndf.drop_duplicates().reset_index(drop=True)
+    gndf['glacier_number'] = gndf.index + 1
+
+    return gndf
+
+def read_termini(map_wkt):
+    df = raw_termini(map_wkt)
 
     # Add a date column
 #    print(df.columns)
     df['date'] = df[['Year', 'Month', 'Day']].apply(
         lambda x: datetime.datetime(*x), axis=1)
 
+    gndf = glacier_key(map_wkt)
 
-    # Determine Wood 21 glacier_number ID by the ordering in the original file
-    gndf = df[['Glacier']]
-    gndf = gndf.drop_duplicates().reset_index(drop=True)
-    gndf['glacier_number'] = gndf.index + 1
 
     # Join main df with glacier numbers
     df = pdutil.merge_nodups(df, gndf, on='Glacier', how='left')
@@ -185,19 +201,23 @@ def read_termini(map_wkt):
 def termini_by_glacier(w21t):
     """Collects rows from original read_termini() DataFrame by Glacier Name.
     Breaks the terminus lines apart into multiple points.
-    Analogous to ns642.by_glacier_id()"""
+    Analogous to ns642.by_glacier_id()
+    type: 'points'|'termini'
+        points: Produce column with all points invovled in terminus LineStrings
+        termini: Produce the entire terminus LineStrings, not broken up as points
+    """
 
-    dfg = w21t.df.groupby(by='w21t_Glacier')
-
-    data = list()
-    for name, gr in dfg:
-        pointss = [list(ls.coords) for ls in gr['w21t_terminus']]
-        points = list(itertools.chain.from_iterable(pointss))    # Join to a single list
-        data.append([name, shapely.geometry.MultiPoint(points)])
-        
-    df2 = pd.DataFrame(data=data, columns=['w21t_Glacier', 'w21t_points'])
-    df2['w21t_key'] = df2['w21t_Glacier']
+    # Create column with value [(date, terminus), ...]
+    df2 = pdutil.group_and_tuplelist(w21t.df, ['w21t_Glacier'],
+            [ ('w21t_date_termini', ['w21t_date', 'w21t_terminus']) ])
     xdf = w21t.replace(df=df2, keycols=['w21t_Glacier'])
+
+    # Add w21t_glacier_number column
+    gndf = glacier_key(w21t.map_wkt) 
+    xdf.df = pdutil.merge_nodups(xdf.df, gndf, left_on='w21t_Glacier', right_on='Glacier').drop('Glacier', axis=1).rename(columns={'glacier_number':'w21t_glacier_number'})
+
+    xdf.prefix = 'w21_'    # We're back to one row per glacier
+
     return xdf
 
 
@@ -468,3 +488,11 @@ def glacier_rate_df(data_fname):
     df['calving'] = df.ice_front_retreat - df.ice_advection - df.ice_front_undercutting - df.thinning_induced_retreat
 
     return df
+
+# ------------------------------------------------------------------
+#def retreat_history(w21, w21t):
+#
+#    w21t
+#
+#    for row in w21.iterrows():
+#        gn = row['w21_glacier_number']

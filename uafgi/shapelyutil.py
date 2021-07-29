@@ -1,5 +1,7 @@
+import itertools
 from osgeo import ogr,osr
 import shapely.geometry
+
 
 # Convert Shapely type to OGR type
 shapely_to_ogr_type = {
@@ -22,3 +24,12 @@ def to_datasource(shape):
     layer.CreateFeature(feat)
 
     return ds
+
+def pointify(shapes):
+    """Converts a bunch of shapes into a jumbled list of points in the
+    shapes combined.  Shapes could be LineString, Polygon, etc.
+
+    shapes:
+        Iterable of Shapely shapes
+    """
+    return list(itertools.chain(*(shape.coords for shape in shapes)))

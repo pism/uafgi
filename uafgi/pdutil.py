@@ -2,6 +2,12 @@ import pandas as pd
 from uafgi import pathutil,gicollections
 import pyproj
 import shapely
+import copy
+
+# Make a tuple out of two columns
+# df['new_col'] = list(zip(df.lat, df.long))
+#
+# df.groupby('a')['b'].apply(list)
 
 def split_na(df, col):
     """Splits a dataframe by whether a value is missing in a column"""
@@ -36,6 +42,10 @@ class ExtDf(gicollections.MutableNamedTuple):
     def __repr__(self):
         return 'ExtDf({})'.format(self.prefix)
 
+    def copy(self):
+        ret = copy.copy(self)    # Shallow copy of ExtDf
+        ret.df = ret.df.copy()    # Shallow copy of dataframe
+        return ret
 
 #__slots__ = ('df', 'units', 'namecols')
 def ext_df(df0, map_wkt, add_prefix=None, units=dict(), lonlat=None, namecols=None, keycols=None):
@@ -152,9 +162,9 @@ def check_dups(df, name, keycol, ignore_dups=False):
                 [x for x in ddf.columns if x.endswith('_DELETEME')], axis=1)
             ddf = ddf.sort_values([keycol])
 
-            print('ERROR:')
-            print(ddf)
-            ddf.to_csv('multi_err.csv')
+#            print('ERROR:')
+#            print(ddf)
+#            ddf.to_csv('multi_err.csv')
             raise JoinError(
                 'Multiple values of keycol {} found in {}'.format(keycol, name),
                 ddf)
@@ -164,6 +174,8 @@ class JoinError(ValueError):
     def __init__(self, msg, df):
         super().__init__(msg)
         self.df = df
+    def __str__(self):
+        return 'ERROR DATAFRAME:\n{}\n{}'.format(str(self.df), super().__str__())
 
 def _match_left_join(sself, overrides=None, ignore_dups=False, match_cols=None, right_cols=None):
     """Given a raw Match, returns a DataFrame that can be used for a left
@@ -370,6 +382,7 @@ def _point_poly_intersects(poly, threshold):
                 if poly.intersects(pp):
                     nintersect += 1
             frac = (nintersect / len(p))
+#            print(frac,len(p))
             return frac > threshold
 #        elif type(p) == shapely.geometry.MultiLineString:
 #            # Proportion of points that overlap the polygon
@@ -436,8 +449,12 @@ def match_point_poly(left, left_point, right, right_poly, left_cols=None, right_
         Additional columns from left and right to include in the match dataframe
     """
 
+    print('xxx ',left_point,right_poly)
+    print(left.df.columns)
+    ll = left.df[left_point]
+    rr = right.df[right_poly]
     keyseries = _polys_overlapping_points(
-        left.df[left_point], right.df[right_poly], right.df.index,
+        ll, rr, right.df.index,
         threshold=threshold)
     keyseries.name = right.prefix+'ix'
     matchdf = keyseries.reset_index().rename(columns={'index':left.prefix+'ix'})
@@ -465,3 +482,21 @@ def merge_nodups(*args, **kwargs):
     drops = [x for x in df.columns if x.endswith('_DELETEME')]
     df = df.drop(drops, axis=1)
     return df
+
+
+def group_and_tuplelist(df, group_col, name_and_colss):
+    """Groups a dataframe; and then creates a new dataframe with one row per group, containing columns:
+        1) group_col (1 column string, or list of columns)
+        2) For each (name, cols) in name_and_colss:
+           One column called <name>, whose value is a zippedl ist from cols
+    """
+    df = df.copy()
+    for name,cols in name_and_colss:
+        df[name] = list(zip(*[df[col] for col in cols]))
+
+    dfg = df.groupby(group_col)
+    dfs = [dfg[name].apply(list) for name,_ in name_and_colss]
+    print('CC1 ',len(dfs[0]))
+    retdf = pd.concat(dfs, axis=1).reset_index()
+    print('CC2 ',len(retdf))
+    return retdf

@@ -47,6 +47,61 @@ def write_shapefile(shapely_obj, fname):
     # Save and close everything
     # ds = layer = feat = geom = None
 
+def write_shapefile2(shapely_objs, fname, fields=[], attrss=[]):
+    """Writes a single Shapely object (or list of Shaeply objects) into a shapefile
+    fields: [ogr.FieldDefn]
+        List of field definitions to set up in this file.
+        Eg: [ogr.FieldDefn('id', ogr.OFTInteger), ...]
+    attrs: [(...), (...), ...]
+        List of dicts: attributes to store in the fields
+    """
+
+    if len(shapely_objs) == 0:
+        print('Nothing to write in shapefile: {}'.format(fname))
+        try:
+            os.remove(fname)
+        except OSError:
+            pass
+        return
+
+    # Get canonical instance; assume all objects are the same
+    obj0 = shapely_objs[0]
+
+    ogr_type = shapely2ogr[obj0.geom_type]
+
+    # Now convert it to a shapefile with OGR    
+    driver = ogr.GetDriverByName('Esri Shapefile')
+    ds = driver.CreateDataSource(fname)
+    layer = ds.CreateLayer('', None, ogr_type)
+    defn = layer.GetLayerDefn()
+
+    # Add one attribute
+    for field in fields:
+        layer.CreateField(field)
+#        field_names.append(field_def.GetName())
+
+
+    ## If there are multiple geometries, put the "for" loop here
+    for obj,attrs in zip(shapely_objs,attrss):
+
+        # Create a new feature (attribute and geometry)
+        feat = ogr.Feature(defn)
+        for ix,(field,attr) in enumerate(zip(fields,attrs)):
+            name = field.GetName()
+            feat.SetField(ix, attr)
+
+        # Make a geometry, from Shapely object
+        geom = ogr.CreateGeometryFromWkb(obj.wkb)
+        feat.SetGeometry(geom)
+
+        layer.CreateFeature(feat)
+
+    # ------- Local variables are all destroyed
+    # feat = geom = None  # destroy these
+    # Save and close everything
+    # ds = layer = feat = geom = None
+
+
 
 
 def _xPOLYGON(shape,transform_fn):
@@ -65,6 +120,24 @@ def _xPOLYLINE(shape,transform_fn):
         np.array([xy[0] for xy in shape.points]),
         np.array([xy[1] for xy in shape.points]))
     return None,shapely.geometry.LineString(zip(gline_xx, gline_yy))
+
+
+# https://github.com/GeospatialPython/pyshp/blob/master/shapefile.py
+# Constants for shape types
+# NULL = 0
+# POINT = 1
+# POLYLINE = 3
+# POLYGON = 5
+# MULTIPOINT = 8
+# POINTZ = 11
+# POLYLINEZ = 13
+# POLYGONZ = 15
+# MULTIPOINTZ = 18
+# POINTM = 21
+# POLYLINEM = 23
+# POLYGONM = 25
+# MULTIPOINTM = 28
+# MULTIPATCH = 31
 
 shapely_converters = {
     shapefile.POLYGON : _xPOLYGON,
@@ -101,6 +174,14 @@ def read(fname, read_shapes=True, wkt=None):
 
             if read_shapes:
                 shape_raw = reader.shape(i)
+                # A Shapefile end up with "holes" if shapes have been removed from it.
+                if shape_raw.shapeType == shapefile.NULL:
+                    continue
+
+#                print('i=',i)
+#                print('shape_raw.shapeType = {}'.format(shape_raw.shapeType))
+#                print('shape_raw = {}'.format(shape_raw))
+
                 shape0,shape = shapely_converters[shape_raw.shapeType](shape_raw, proj.transform)
                 rec['_shape0'] = shape0    # Raw coordinates
                 rec['_shape'] = shape
