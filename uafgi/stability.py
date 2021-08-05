@@ -21,11 +21,41 @@ import uafgi.data.w21 as d_w21
 import uafgi.data.wkt
 from uafgi.data import greenland,stability
 import pickle
+from uafgi import bedmachine,glacier
+
 
 
 def select_glaciers():
-    """Determine a set of glaciers for our experiment.
-    Returns: A dataframe with many columns.
+    """Step 1: Determine a set of glaciers for our experiment.
+
+    Returns: A dataframe with columns:
+    Index(['w21t_Glacier', 'w21t_date_termini', 'w21t_glacier_number', 'w21t_tloc',
+           'w21_popular_name', 'w21_greenlandic_name', 'w21_coast', 'w21_category',
+           'w21_Qr', 'w21_Qf', 'w21_Qm', 'w21_Qs', 'w21_Qc_inferred', 'w21_qm',
+           'w21_qf', 'w21_qc', 'w21_mean_depth', 'w21_min_depth',
+           'w21_quality_str', 'w21_area_grounded_1992_2017',
+           'w21_area_grounded_1992_1997', 'w21_area_grounded_1998_2007',
+           'w21_area_grounded_2008_2017', 'w21_mean_fjord_width',
+           'w21_length_grounded_1992_2017', 'w21_length_grounded_1992_1997',
+           'w21_length_grounded_1998_2007', 'w21_length_grounded_2008_2017',
+           'w21_ocean_model_sample_area', 'w21_mean_TF_1992-2017',
+           'w21_mean_TF_1992-1997', 'w21_mean_TF_1998-2007',
+           'w21_mean_TF_2008-2017', 'w21_subglacial_discharge_1992_2017',
+           'w21_subglacial_discharge_1992_1997',
+           'w21_subglacial_discharge_1998_2007',
+           'w21_subglacial_discharge_2008_2017', 'w21_mean_xsection_area',
+           'w21_mean_undercutting_1992_2017', 'w21_mean_undercutting_1992_1997',
+           'w21_mean_undercutting_1998_2007', 'w21_mean_undercutting_2008_2017',
+           'w21_mean_undercutting_uncertainty', 'w21_flux_basin_mouginot_2019',
+           'w21_mean_discharge', 'w21_mean_mass_balance',
+           'w21_reference_smb_1961_1990', 'w21_glacier_number', 'w21_data_fname',
+           'w21_key', 'w21_allnames', 'w21_tloc', 'fj_poly', 'fj_fid', 'ns481_key',
+           'ns481_grid', 'ns481_poly', 'up_key', 'up_fid', 'up_id', 'up_loc',
+           'cf20_key', 'cf20_glacier_id', 'cf20_greenlandic_name',
+           'cf20_official_name', 'cf20_alt_name', 'cf20_ref_name', 'cf20_fname',
+           'cf20_uniqename', 'cf20_locs', 'cf20_allnames', 'ns642_key',
+           'ns642_GlacierID', 'ns642_date_termini', 'ns642_points'],
+          dtype='object')
     """
 
     map_wkt = uafgi.data.wkt.nsidc_ps_north
@@ -44,6 +74,8 @@ def select_glaciers():
         'w21t_Glacier' : [
             # Kakivfaat glacier has one glacier front in Wood data, but two in NSIDC-0642 (as it separates)
             'Kakivfaat',
+            # Glacier has small fjord, terminus is bigger than the fjord, has already retreated back to land
+            'Helland W',
         ]
     })
 
@@ -148,3 +180,49 @@ def select_glaciers():
     select = match.left_join(overrides=over)
 
     return select
+
+def retreat_history(select):
+    """Generates a dataframe of the retreat history (in terms of fjord area) of each glacier.
+    select: ExtDf
+        Output of select_glaciers() above
+    """
+#    for _,row in select.df.iterrows():
+#        if pd.isna(row.up_loc):
+#        print(row.w21t_Glacier, row.w21t_glacier_number, row.ns481_grid, row.up_loc)
+
+#    on = False
+    data = list()
+    for _,row in select.df.iterrows():
+        if row.w21t_Glacier in {'Helland W'}:    # Degenerate
+            continue
+#
+#        if row.w21t_glacier_number == 175:
+#            on = True
+#        if not on:
+#            continue
+
+        print('********* {} {} {}'.format(row.ns481_grid, row.w21t_glacier_number, row.w21t_Glacier))
+        # Retrieve columns we need
+        dtterm = sorted(row['w21t_date_termini'])
+
+        # Determine the local grid
+        grid = row['ns481_grid']
+        grid_file = uafgi.data.measures_grid_file(grid)
+        grid_info = gdalutil.FileInfo(grid_file)
+        bedmachine_file = uafgi.data.bedmachine_local(grid)
+
+        # Load the fjord
+        fjord = bedmachine.get_fjord(bedmachine_file, row.fj_poly)
+
+        # Quantify retreat for each terminus
+        for dt,terminus in dtterm:
+            fjc = glacier.classify_fjord(fjord, grid_info, row.up_loc, terminus)
+            up_fjord = np.isin(fjc, glacier.GE_TERMINUS)
+            up_area = np.sum(np.sum(up_fjord))
+            data.append((row['w21t_glacier_number'], dt, up_area))
+
+    df = pd.DataFrame(data, columns=['w21t_glacier_number', 'date', 'up_area'])
+    df.to_pickle('retreat_area.df')
+    return df
+#            print(row['w21t_Glacier'], row['w21t_glacier_number'], dt, up_area)
+

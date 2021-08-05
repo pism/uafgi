@@ -1,8 +1,10 @@
 import pandas as pd
+import uafgi.data
 from uafgi import pathutil,gicollections
 import pyproj
 import shapely
 import copy
+import os,pickle
 
 # Make a tuple out of two columns
 # df['new_col'] = list(zip(df.lat, df.long))
@@ -38,6 +40,16 @@ class ExtDf(gicollections.MutableNamedTuple):
         'units',
         'keycols',
         'map_wkt')
+
+    @staticmethod
+    def read_pickle(fname):
+        with open(fname, 'rb') as out:
+            return pickle.load(out)
+
+    def to_pickle(self, fname):
+        os.makedirs(os.path.split(fname)[0], exist_ok=True)
+        with open(fname, 'wb') as out:
+            return pickle.dump(self, out)
 
     def __repr__(self):
         return 'ExtDf({})'.format(self.prefix)
@@ -483,6 +495,12 @@ def merge_nodups(*args, **kwargs):
     df = df.drop(drops, axis=1)
     return df
 
+def merge_addcols(df0, *args, addcols=set(), **kwargs):
+    """Does a left join of (df0,df1); picking up only columns listed in newcols"""
+    keeps = list(df0.columns) + addcols
+    return merge_nodups(df0, *args, **kwargs)[keeps]
+
+
 
 def group_and_tuplelist(df, group_col, name_and_colss):
     """Groups a dataframe; and then creates a new dataframe with one row per group, containing columns:
@@ -500,3 +518,4 @@ def group_and_tuplelist(df, group_col, name_and_colss):
     retdf = pd.concat(dfs, axis=1).reset_index()
     print('CC2 ',len(retdf))
     return retdf
+

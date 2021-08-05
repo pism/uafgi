@@ -32,4 +32,4 @@ def pointify(shapes):
     shapes:
         Iterable of Shapely shapes
     """
-    return list(itertools.chain(*(shape.coords for shape in shapes)))
+    return shapely.geometry.MultiPoint(list(itertools.chain(*(shape.coords for shape in shapes))))

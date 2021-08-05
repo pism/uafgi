@@ -56,19 +56,34 @@ def read(map_wkt):
         keycols=['GlacierID', 'year1'])
 
 
-def by_glacier_id(ns642):
+def termini_by_glacier(ns642):
     """Collects rows from original ns642 DataFrame by GlacierID.
     Breaks the terminus lines apart into multiple points."""
 
-    dfg = ns642.df.groupby(by='ns642_GlacierID')
+    # Create column with value [(date, terminus), ...]
+    df2 = pdutil.group_and_tuplelist(ns642.df, ['ns642_GlacierID'],
+            [ ('ns642_date_termini', ['ns642_date', 'ns642_terminus']) ])
 
-    data = list()
-    for name, gr in dfg:
-        pointss = [list(ls.coords) for ls in gr['ns642_terminus']]
-        points = list(itertools.chain.from_iterable(pointss))    # Join to a single list
-        data.append([name, shapely.geometry.MultiPoint(points)])
-        
-    df2 = pd.DataFrame(data=data, columns=['ns642_GlacierID', 'ns642_points'])
-    df2['ns642_key'] = df2['ns642_GlacierID']
-    xdf = ns642.replace(df=df2, keycols=['ns642_GlacierID'])
+
+    xdf = ns642.replace(df=df2, keycols=['ns642_Glacier'])
+    xdf.df['ns642_key'] = xdf.df['ns642_GlacierID']
     return xdf
+
+#
+#
+#
+#
+#
+#    dfg = ns642.df.groupby(by='ns642_GlacierID')
+#
+#    data = list()
+#    for name, gr in dfg:
+#        pointss = [list(ls.coords) for ls in gr['ns642_terminus']]
+#        points = list(itertools.chain.from_iterable(pointss))    # Join to a single list
+#        data.append([name, shapely.geometry.MultiPoint(points)])
+#        
+#    df2 = pd.DataFrame(data=data, columns=['ns642_GlacierID', 'ns642_points'])
+#    df2['ns642_key'] = df2['ns642_GlacierID']
+#    xdf = ns642.replace(df=df2, keycols=['ns642_GlacierID'])
+#    return xdf
+#

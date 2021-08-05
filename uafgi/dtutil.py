@@ -1,6 +1,4 @@
 import datetime
-
-from datetime import datetime as dt
 import time
 
 # https://www.py4u.net/discuss/142432
@@ -10,8 +8,8 @@ def year_fraction(date):
     s = sinceEpoch
 
     year = date.year
-    startOfThisYear = dt(year=year, month=1, day=1)
-    startOfNextYear = dt(year=year+1, month=1, day=1)
+    startOfThisYear = datetime.datetime(year=year, month=1, day=1)
+    startOfNextYear = datetime.datetime(year=year+1, month=1, day=1)
 
     yearElapsed = s(date) - s(startOfThisYear)
     yearDuration = s(startOfNextYear) - s(startOfThisYear)
