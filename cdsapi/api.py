@@ -20,7 +20,7 @@ try:
 except ImportError:
     from urlparse import urljoin
 
-from tqdm import tqdm
+#from tqdm import tqdm
 
 
 def bytes_to_string(n):
@@ -120,21 +120,26 @@ class Result(object):
             try:
                 r.raise_for_status()
 
-                with tqdm(
-                    total=size,
-                    unit_scale=True,
-                    unit_divisor=1024,
-                    unit="B",
-                    disable=not self.progress,
-                    leave=False,
-                ) as pbar:
-                    pbar.update(total)
+                print('================ Total Size: {:e}'.format(size))
+                print('    So far: {:e}'.format(total))
+
+                if True:
+#                with tqdm(
+#                    total=size,
+#                    unit_scale=True,
+#                    unit_divisor=1024,
+#                    unit="B",
+#                    disable=not self.progress,
+#                    leave=False,
+#                ) as pbar:
+#                    pbar.update(total)
                     with open(target, mode) as f:
                         for chunk in r.iter_content(chunk_size=1024):
                             if chunk:
                                 f.write(chunk)
                                 total += len(chunk)
-                                pbar.update(len(chunk))
+#                                pbar.update(len(chunk))
+                                print('    So far: {:e}'.format(total))
 
             except requests.exceptions.ConnectionError as e:
                 self.error("Download interupted: %s" % (e,))
@@ -473,6 +478,9 @@ class Client(object):
                 return Result(self, reply)
 
             if reply["state"] in ("queued", "running"):
+                time.sleep(10)
+                return Result(self, reply)
+
                 rid = reply["request_id"]
 
                 self.debug("Request ID is %s, sleep %s", rid, sleep)
