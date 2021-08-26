@@ -490,9 +490,5 @@ def glacier_rate_df(data_fname):
     return df
 
 # ------------------------------------------------------------------
-#def retreat_history(w21, w21t):
-#
-#    w21t
-#
-#    for row in w21.iterrows():
-#        gn = row['w21_glacier_number']
+def velfile_df():
+    """Produces a dataframe of velocity files"""

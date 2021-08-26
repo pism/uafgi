@@ -507,6 +507,12 @@ def group_and_tuplelist(df, group_col, name_and_colss):
         1) group_col (1 column string, or list of columns)
         2) For each (name, cols) in name_and_colss:
            One column called <name>, whose value is a zippedl ist from cols
+
+    Example:
+        pdutil.group_and_tuplelist(w21t.df, ['w21t_Glacier'],
+            [ ('w21t_date_termini', ['w21t_date', 'w21t_terminus']) ])
+        Groups by w21t_Glacier, which becomes the index in the new dataframe
+        Creates one column called 'w21t_date_termini' containing zipped tuple (w21t_date, w21t_termins)
     """
     df = df.copy()
     for name,cols in name_and_colss:
@@ -514,8 +520,6 @@ def group_and_tuplelist(df, group_col, name_and_colss):
 
     dfg = df.groupby(group_col)
     dfs = [dfg[name].apply(list) for name,_ in name_and_colss]
-    print('CC1 ',len(dfs[0]))
     retdf = pd.concat(dfs, axis=1).reset_index()
-    print('CC2 ',len(retdf))
     return retdf
 

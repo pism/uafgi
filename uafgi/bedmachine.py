@@ -48,7 +48,7 @@ def replace_thk(bedmachine_file0, bedmachine_file1, thk):
             ncout.variables['thickness'][:] = thk
 
 
-def get_fjord(bmlocal_file, fj_poly):
+def get_fjord_gd(bmlocal_file, fj_poly):
     """Returns a raster of the fjord for a glacier.
 
     bmlocalfile:
@@ -58,6 +58,7 @@ def get_fjord(bmlocal_file, fj_poly):
 
     Returns: np.array(bool)
         Localized raster: True in fjord, False elsewhere
+        Raster is in GDAL convention
     """
 
 

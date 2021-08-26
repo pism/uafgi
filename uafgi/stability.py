@@ -218,7 +218,8 @@ def retreat_history(select):
         for dt,terminus in dtterm:
             fjc = glacier.classify_fjord(fjord, grid_info, row.up_loc, terminus)
             up_fjord = np.isin(fjc, glacier.GE_TERMINUS)
-            up_area = np.sum(np.sum(up_fjord))
+            up_area = np.sum(np.sum(up_fjord)) * grid_info.dx * grid_info.dy
+#            print('   up_area: ', np.sum(np.sum(up_fjord)), grid_info.dx, grid_info.dy)
             data.append((row['w21t_glacier_number'], dt, up_area))
 
     df = pd.DataFrame(data, columns=['w21t_glacier_number', 'date', 'up_area'])
@@ -226,3 +227,89 @@ def retreat_history(select):
     return df
 #            print(row['w21t_Glacier'], row['w21t_glacier_number'], dt, up_area)
 
+
+
+def compute_sigma(velocity_file, bm_file, ofname, tdir):
+
+
+***** We want to:
+
+1. Do not worry about cutting off at the terminus.  We want to compute sigma for ALL avialable areas with ice and velocity measurements.
+2. THEN we compute sigma, integrated over the terminus.
+
+
+
+
+
+
+
+    """Computes sigma for ItsLIVE files
+    velocity_file:
+        Input file (result of merge_to_pism_rule()) with multiple timesteps
+    ofname:
+        Output file
+    """
+
+
+    # --------------------------------------------------------
+    # Create output file, based on input velocity file
+
+    # Copy input file to output; but not the velocity variables
+    with netCDF4.Dataset(velocity_file) as ncin:
+        schema = ncutil.Schema(ncin)
+        ns481_grid = ncin.grid
+
+        for vname in ('u_ssa_bc', 'v_ssa_bc', 'v'):
+            if vname in schema.vars:
+                del schema.vars[vname]
+
+        ntime = len(ncin.dimensions['time'])
+        #nc481_grid = ncin.ns481_grid
+
+
+    # Initialize output file
+    with netCDF4.Dataset(ofname, 'w') as ncout:
+        # Create output file, copying struture of input
+        schema.create(ncout)
+        var_kwargs = {'zlib': True}
+
+        # Add new variables
+        for ix in (0,1):
+            ncv = ncout.createVariable(f'strain_rates_{ix}', 'd', ('time', 'y', 'x'), **var_kwargs)
+            ncv.long_name = f'Eigenvalue #{ix} of strain rate, used to compute von Mises stress; see glacier.von_mises_stress_eig()'
+        ncv = ncout.createVariable('mask', 'i', ('time', 'y', 'x'), **var_kwargs)
+        ncv.long_name = 'PISM Mask'
+        ncv.description = '0=bare ground; 2=grounded ice; 3=floating ice; 4=open water'
+        ncv = ncout.createVariable(f'sigma', 'd', ('time', 'y', 'x'), **var_kwargs)
+        ncv.long_name = 'von Mises Stress'
+        ncv.description = 'Computed using glacier.von_mises_stress_eig()'
+        ncv.units = 'Pa'
+    # --------------------------------------------------------
+
+
+
+    # Generate sigmas for each timestep
+    for itime in range(ntime):
+        #of_tmp = tdir.filename()
+        of_tmp = './tmp.nc'
+        get_von_Mises_stress(
+            ns481_grid, velocity_file,
+            of_tmp, tdir,
+            itime=itime,
+            dry_run=False,
+            sigma_max=1.e6,    # Doesn't matter
+            dt_s=100.)            # Really short
+
+        # Copy from temporary file into final output file
+        eig = list()
+        with netCDF4.Dataset(ofname, 'a') as ncout:
+            with netCDF4.Dataset(of_tmp) as ncin:
+                for ix in (0,1):
+                    L = ncin.variables['strain_rates[{}]'.format(ix)][:]
+                    eig.append(L)
+                    ncv = ncout.variables['strain_rates_{}'.format(ix)]
+                    ncv[itime,:] = L
+
+                ncout.variables['sigma'][itime,:] = glacier.von_mises_stress_eig(*eig)
+
+                ncout.variables['mask'][itime,:] = ncin.variables['mask'][0,:]

@@ -34,15 +34,23 @@ def replace_reftime_unit(unit, relname='seconds'):
     return cf_units.Unit(relname+match.group(2), unit.calendar)
 
 
-def read_time(nc, vname, units=None, calendar=None):
+def read_time(nc, vname, units=None, calendar=None, unitvar=None):
     """Reads a CF-compliant time variable and converts to Python datetime objects.
     nc: netCDF4.Dataset
         An open NetCDF file
     vname: str
         Name of time variable to read
+    unitvar: str
+        Obtain unit variables from this variable
     Returns: [datetime, ...]
         The times, converted to Python format.
     """
+    # Read units from unitvar, if supplied
+    if unitvar is not None:
+        uvar = nc.variables[unitvar]
+        units = uvar.units
+        calendar = uvar.calendar
+
     nctime = nc.variables[vname]
     if units is None:
         units = nctime.units

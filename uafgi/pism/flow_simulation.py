@@ -1,3 +1,4 @@
+import collections
 import traceback
 import os,sys
 import numpy as np
@@ -27,7 +28,7 @@ blackout_names = {
 
 
 
-def run_pism(ns481_grid, fjord_classes, velocity_file, output_file, tdir, dry_run=False, attrs=dict(),
+def run_pism(bedmachine_file0, ns481_grid, fjord_classes, velocity_file, output_file, tdir, dry_run=False, attrs=dict(),
     itime=None, year=None,
     dt_s=90*86400., remove_downstream_ice=True, delete_vars=list(), **pism_kwargs0):
     """Does a single PISM run
@@ -67,7 +68,7 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, output_file, tdir, dry_ru
     grid_file = uafgi.data.measures_grid_file(grid)
     grid_info = gdalutil.FileInfo(grid_file)
 
-    bedmachine_file0 = uafgi.data.bedmachine_local(grid)
+#    bedmachine_file0 = uafgi.data.bedmachine_local(grid)
 
 
     if dry_run:
@@ -213,7 +214,8 @@ def run_pism(ns481_grid, fjord_classes, velocity_file, output_file, tdir, dry_ru
 
 def get_von_Mises_stress(ns481_grid, velocity_file, output_file, tdir, **kwargs):
     """Runs PISM just a baby amount, to get the von Mises stress on the first timestep."""
-    args = (ns481_grid, None, velocity_file, output_file, tdir)
+    bedmachine_file0 = uafgi.data.bedmachine_local(ns481_grid)
+    args = (bedmachine_file0, ns481_grid, None, velocity_file, output_file, tdir)
     kwargs2 = kwargs.copy()
     kwargs2['remove_downstream_ice'] = False    # Don't cut off any ice below the terminus
     kwargs2['dt_s'] = 100.                     # Run only briefly
@@ -306,7 +308,8 @@ def compute_sigma_rule(itslive_nc, odir):
         [itslive_nc], [ofname])
 
 # ===============================================================
-def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, fjord_width, itslive_nc=None, debug_out_nc=None):
+FlowRateRet = collections.namedtuple('FlowRateRet', ('flux', 'up_area'))
+def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, itslive_nc=None, debug_out_nc=None):
     """
     grid:
         Name of local grid to use (eg: W69.10N)
@@ -324,8 +327,6 @@ def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, fjord_width, it
         Flow we're integrating
     mask: np.array
         PISM mask
-    fjord_width:  [m]
-        Mean width of fjord
     itslive_nc: str (OPTIONAL)
         Name of input velocities file
         If set, used only for debugging
@@ -338,10 +339,10 @@ def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, fjord_width, it
     # Cut off the fjord at our terminus
     fjc_gd = glacier.classify_fjord(fjord_gd, grid_info, up_loc_gd, terminus)
     fjc = np.flipud(fjc_gd)    # fjord was originally read by gdal, it is flipped u/d
-    up_area = np.sum(np.isin(fjc, glacier.GE_TERMINUS)) * grid_info.dx * grid_info.dy
+    up_area = np.sum(np.isin(fjc, glacier.GE_TERMINUS)) * grid_info.dx * grid_info.dy    # [m^2]
     fjord = np.isin(fjc, glacier.ALL_FJORD)
 #    print('up_area: {}: {}'.format(up_area, terminus))
-    print('up_area: {}'.format(up_area))
+#    print('up_area: {}'.format(up_area))
 
     # Update the PISM map to reflect cut-off fjord.
     #ICE_TYPES = (pismutil.MASK_GROUNDED, pismutil.MASK_FLOATING)
@@ -374,13 +375,9 @@ def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, fjord_width, it
                 ncout.variables['flux'][:] = flux[:]
     # ------------------------------------------------------------------------
 
-    tflux = np.sum(flux)
-    aflux = (tflux / fjord_width) * (365 * 86400.)   # m/a
-#    print('Flux: {} m^2/s = {} m/a'.format(tflux, aflux))
-
-    return {'flux': aflux, 'up_area': up_area}
-
-
+    tflux = np.sum(flux)    # Flux across boundary [m^2 s-1]
+    
+    return FlowRateRet(tflux, up_area)
 
 def flow_rate2(row, w21t, Merger, year0, year1):
     """Simplified API for multiple termini: computes velocity and
@@ -469,87 +466,64 @@ def flow_rate2(row, w21t, Merger, year0, year1):
     return pd.DataFrame(data=orows)
 
 
-
-
-def future_flow_rate(row, tdf, itslive_nc):
-
-    """Simplified API for multiple termini: computes velocity and
-    velocity*sigma flux for a set of termini over time.  Uses most
-    recent velocities out of the velocity file.
-
-    row:
-        Row from the "select" dataframe of our glaciers of interest.
-    tdf: DataFrame
-        Termini to run
-    w21t:
-        Available termini for all glaciers.
-         = uafgi.data.w21.read_termini(uafgi.data.wkt.nsidc_ps_north).df
-    Merger: itslive.[ItsliveMerger/W21Merger]
-        Which type of velocity file we'll use
-    year0, year1:
-        Year range.  Must match names of velocity files.
-
+FlowRate3Ret = collections.namedtuple('FlowRateRet3', ('aflux', 'sflux', 'up_area'))
+def flow_rate3(grid, bedmachine_file, fj_poly, velocity_file, sigma_file, itime, termini, up_loc_gd):
     """
-    orows = list()
+    velocity_file:
+        Raster of ice surface velocities
+    sigma_file:
+        Raster of PISM-computed sigma values
+        (Derived from sigma_file)
+    itime:
+        Time index in velocity/sigma files to use
+    terminus: shapely.LineString, ...
+        The termini across which to integrate fluxes
+#    fjord_gd:
+#        Fjord raster
+#        Eg: np.isin(selrow['fjord_classes'], glacier.ALL_FJORD)
+#        NOTE: _gd == "as read by GDAL"
+    up_loc_gd:
+        Location of upstream point in fjord
+        eg: selrow['up_loc']
+        NOTE: _gd == "as read by GDAL"
+    Returns: [(aflux, sflux, up_area), ...]
+        
+    """
+    sigma_file = os.path.splitext(velocity_file)[0] + '_sigma.nc'
 
-    grid = row['ns481_grid']
-    fjord_gd = np.isin(row['fjord_classes'], glacier.ALL_FJORD)    # _gd == "as read by GDAL"
-    up_loc_gd = row['up_loc']
+    # Load the fjord
+    fjord_gd = bedmachine.get_fjord_gd(bedmachine_file, fj_poly)
 
-    # Get termini for that
-#    tdfx = tdf[tdf['w21t_Glacier'] == row['w21t_Glacier']]
-    tdfx = tdf    # For now, assume we've pre-selected termini just for one glacier.  In future, we'll read all extra termini from a Shapefile, then intersect with the glacier polygons.
 
-    #itslive_nc = Merger.ofname(grid, year0, year1)
-    sigma_nc = os.path.splitext(itslive_nc)[0] + '_sigma.nc'
+    # Read velocity components
+    with netCDF4.Dataset(velocity_file) as nc:
+        uu = ncutil.convert_var(nc, 'u_ssa_bc', 'm s-1')[itime,:]
+        vv = ncutil.convert_var(nc, 'v_ssa_bc', 'm s-1')[itime,:]
 
-    with netCDF4.Dataset(itslive_nc) as nc:
-        time = cfutil.read_time(nc, 'time')
-        nct = nc.variables['time']
-        time_bnds = cfutil.read_time(nc, 'time_bnds',
-            units=nct.units, calendar=nct.calendar)
+    # Read sigma
+    with netCDF4.Dataset(sigma_file) as nc:
+        sigma = nc.variables['sigma'][itime,:]
+        mask = nc.variables['mask'][itime,:]
 
-        # Fix end of range in Its-Live
-        time_bnds[:,1] += Merger.time_bnds_adjust
+    ret = list()
+    for terminus in termini:
+        # Turn debugging on/off
+        debug_kwargs = dict(itslive_nc=velocity_file, debug_out_nc='debug_sflux.nc')
+        #debug_kwargs = dict()
 
-    for terminux_ix,trow in tdfx.iterrows():
-        try:
-            # Read most recent velocity components
-            with netCDF4.Dataset(itslive_nc) as nc:
-                uu = ncutil.convert_var(nc, 'u_ssa_bc', 'm s-1')[-1,:]
-                vv = ncutil.convert_var(nc, 'v_ssa_bc', 'm s-1')[-1,:]
+        # Compute velocity flux
+        fra = flow_rate(grid, fjord_gd, up_loc_gd, terminus,
+            uu, vv,
+            mask, **debug_kwargs)
 
-            # Read sigma
-            with netCDF4.Dataset(sigma_nc) as nc:
-                sigma = nc.variables['sigma'][-1,:]
-                mask = nc.variables['mask'][-1,:]
+        # Compute sigma flux
+        frs = flow_rate(grid, fjord_gd, up_loc_gd, terminus,
+            uu*sigma, vv*sigma,
+            mask, **debug_kwargs)
 
-                fjord_width = row['w21_mean_fjord_width'] * 1000.    # Data in km
+        answer = FlowRate3Ret(fra.flux, frs.flux, fra.up_area)
+#        print(answer.sflux/answer.aflux, answer)
+        ret.append(answer)
 
-            terminus = trow['terminus']
-
-            # Compute velocity flux
-            fr_aflux = flow_rate(grid, fjord_gd, up_loc_gd, terminus,
-                uu, vv,
-                mask, fjord_width, itslive_nc=itslive_nc, debug_out_nc='debug_aflux.nc')
-
-            # Compute sigma flux
-            fr_sflux = flow_rate(grid, fjord_gd, up_loc_gd, terminus,
-                uu*sigma, vv*sigma,
-                mask, fjord_width, itslive_nc=itslive_nc, debug_out_nc='debug_sflux.nc')['flux']
-
-            orow = {
-                'w21t_key' : row['w21t_key'],
-                'terminux_ix' : terminux_ix,
-                'velocity_source' : itslive_nc.split()[1],
-                'up_area': fr_aflux['up_area'],
-                'aflux': fr_aflux['flux'],
-                'sflux': fr_sflux['flux']}
-
-            orows.append(orow)
-        except:
-            traceback.print_exc()
-            pass
-
-    return pd.DataFrame(data=orows)
+    return ret
 
