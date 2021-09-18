@@ -31,4 +31,9 @@ def bedmachine_local(grid):
     return os.path.join(
         OUTPUTS, 'bedmachine/BedMachineGreenland-2017-09-20_{}.nc'.format(grid))
 
+def gimpdem_local(grid):
+    """Gimpdem file localized for a NSIDC 0481 (MEASURES) grid"""
+    return os.path.join(
+        OUTPUTS, 'gimpdem-nsidc0645/gimpdem_v01.1_{}.nc'.format(grid))
+
 # -------------------------------------------------------

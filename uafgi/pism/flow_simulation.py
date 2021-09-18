@@ -223,6 +223,197 @@ def get_von_Mises_stress(ns481_grid, velocity_file, output_file, tdir, **kwargs)
 
     return run_pism(*args, **kwargs2)
 
+# ==========================================================================
+def get_von_Mises_stress_gimpdem(ns481_grid, velocity_file, output_file, tdir,
+    dry_run=False, attrs=dict(),
+    itime=None, year=None,
+    **pism_kwargs0):
+
+    """Clean sheet replacement for get_von_Mises_stress().
+    Also incorporates use of the GIMP DEM in place of Bedmachine's elevation.
+
+    Does a single PISM run
+    ns481_grid:
+        Name of the grid on which this runs (as per NSIDC-0481 dataset)
+    fjord_classes:
+        Classification of fjord areas, as initial condition for run
+    bedmachine_file: <filename>
+        Local bedmachine file extract
+    velocity_file: <filename>
+        File of velocities; must have same CRS and bounds as bedmachine_file
+    ofiles_only:
+        True if this should just compute output filenames and return
+        (for use in make rules)
+    dry_run:
+        If true, just return (inputs, outputs)
+    attrs: pd.Series (or just a dict)
+        Row of a Pandas Dataframe, to write to output file
+    itime: int
+        Index into time dimension of velocity file
+        NOTE: Either set year or itime
+    year: int
+        Year (of time dimension) to use
+        NOTE: Either set year or itime
+    dt_s: [s]
+        Length of time to run for
+    remove_downstream_ice:
+        Should ice downstream of the terminus line be removed?
+    pism_kwargs0:
+        kwargs given to PISM run
+    """
+
+
+
+    bedmachine_file0 = uafgi.data.bedmachine_local(ns481_grid)
+    gimpdem_file0 = uafgi.data.gimpdem_local(ns481_grid)
+
+    # Run only briefly
+    dt_s = 100.
+    # PISM Variables not needed in final output
+    delete_vars = {'ice_area_specific_volume', 'thk', 'total_retreat_rate', 'flux_divergence'}
+
+
+    # ============ Determine input/output filenames
+
+    # Determine the local grid
+    grid_file = uafgi.data.measures_grid_file(ns481_grid)
+    grid_info = gdalutil.FileInfo(grid_file)
+
+
+    # Use to construct Makefile rules
+    if dry_run:
+        inputs = [grid_file, bedmachine_file0, gimpdem_file0, velocity_file]
+        outputs = [output_file_raw]
+        return inputs, outputs
+
+    # ============================================
+
+
+    # Get total kwargs to use for PISM
+    default_kwargs = dict(calving0.FrontEvolution.default_kwargs.items())
+    default_kwargs['min_ice_thickness'] = 50.0    # See TODO below
+    kwargs = argutil.select_kwargs(pism_kwargs0, default_kwargs)
+
+
+    # -------------------------------------------------
+    # Construct an appropriate Bedmachine file
+    bedmachine_file1 = tdir.filename(suffix='.nc')
+
+    # Use Gimp DEM Elevations
+    with netCDF4.Dataset(gimpdem_file0, 'r') as nc:
+        elevation = nc.variables['elevation'][:]
+    # ...merged into Bedmachine file
+    with netCDF4.Dataset(bedmachine_file0, 'r') as ncin:
+        schema = ncutil.Schema(ncin)
+        with netCDF4.Dataset(bedmachine_file1, 'w') as ncout:
+            # Create all variables
+            schema.create(ncout)
+
+            # Copy all variables except thickness
+            del schema.vars['thickness']
+            schema.copy(ncin, ncout)
+
+            # Compute our own thickness
+            ncout.variables['thickness'][:] = elevation - ncin.variables['bed'][:]
+    # -------------------------------------------------
+    # Obtain start and end time in PISM units (seconds)
+    with netCDF4.Dataset(velocity_file) as nc:
+        nctime = nc.variables['time']
+        time_units = cf_units.Unit(nctime.units, nctime.calendar)
+        time_units_s = cfutil.replace_reftime_unit(time_units, 'seconds')
+        t0_py = time_units.num2date(nctime[0])    # Python-format date
+        t0_s = time_units_s.date2num(t0_py)
+        t1_s = t0_s + dt_s
+    # ---------------------------------------------------------------
+
+    print('============ Running time {} for {} seconds'.format(t0_py, t1_s-t0_s))
+    output_file3 = tdir.filename()
+    print('     ---> {}'.format(output_file3))
+    sys.stdout.flush()
+
+    try:
+        # The append_time=True argument of prepare_output
+        # determines if after this call the file will contain
+        # zero (append_time=False) or one (append_time=True)
+        # records.
+        sys.stdout.flush()
+        output = PISM.util.prepare_output(output_file3, append_time=False)
+
+        # TODO: Add a time_units and calendar argument to prepare_output()
+        # https://github.com/pism/pism/commit/1cd1719189f1155bf56b4488338f1d6e53c29659
+
+        #### I need to mimic this: Ross_combined.nc plus the script that made it
+        # Script in the main PISM repo, it's in examples/ross/preprocess.py
+        # bedmachine_file = "~/github/pism/pism/examples/ross/Ross_combined.nc"
+        # bedmachine_file = "Ross_combined.nc"
+        ctx = PISM.Context()
+        # TODO: Shouldn't this go in calving0.init_geometry()?
+        ctx.config.set_number("geometry.ice_free_thickness_standard", kwargs['min_ice_thickness'])
+
+        grid = calving0.create_grid(ctx.ctx, bedmachine_file1, "thickness")
+        geometry = calving0.init_geometry(grid, bedmachine_file1, kwargs['min_ice_thickness'])
+
+        ice_velocity = calving0.init_velocity(grid, velocity_file)
+        print('ice_velocity sum: '.format(np.sum(np.sum(ice_velocity))))
+
+        # NB: For debugging I might use a low value of sigma_max to make SURE things retreat
+        # default_kwargs = dict(
+        #     ice_softness=3.1689e-24, sigma_max=1e6, max_ice_speed=5e-4)
+#        fe_kwargs = dict(sigma_max=0.1e6)
+        front_evolution = calving0.FrontEvolution(grid, sigma_max=kwargs['sigma_max'])
+
+        # ========== ************ DEBUGGING *****************
+        #xout = PISM.util.prepare_output('x.nc', append_time=False)
+        #PISM.append_time(xout, front_evolution.config, 17)
+        #geometry.ice_thickness.write(xout)
+        #geometry.cell_type.write(xout)
+
+
+        # Iterate through portions of (dt0,dt1) with constant velocities
+        ice_velocity.read(velocity_file, itime)   # 0 ==> first record of that file (if time-dependent)
+        sys.stdout.flush()
+        front_evolution(geometry, ice_velocity,
+           t0_s, t1_s,
+           output=output)
+        exception = None
+    except Exception as e:
+        print('********** Error: {}'.format(str(e)))
+        traceback.print_exc() 
+        exception = e
+    finally:
+        output.close()
+
+    # ----------------------- Post-processing
+    output_file_tmp = tdir.filename()
+    pismutil.fix_output(output_file3, exception, fb.time_units_s, output_file_tmp, delete_vars=delete_vars)
+
+    with netCDF4.Dataset(output_file_tmp, 'a') as nc:
+
+        # Add parameter info
+        nc.creator = 'flow_simulation.py'
+        nc.ns481_grid = ns481_grid
+        nc.velocity_file = velocity_file
+        nc.year = year
+        for key,val in pism_kwargs0.items():
+            nc.setncattr(key,val)
+
+        # Add info from Pandas Series
+        for col,val in attrs.items():
+            mt = (type(val).__module__, type(val).__name__)
+            if mt not in blackout_types and col not in blackout_names:
+                try:
+                    nc.setncattr(col,val)
+                except:
+                    print('Error pickling column {} = {}'.format(col,val))
+                    raise
+
+    # ------------------- Create final output file
+    os.makedirs(os.path.split(output_file)[0], exist_ok=True)
+    os.rename(output_file_tmp, output_file)
+
+
+
+# ==============================================================================
 
 def compute_sigma(velocity_file, ofname, tdir):
     """Computes sigma for ItsLIVE files
@@ -266,8 +457,8 @@ def compute_sigma(velocity_file, ofname, tdir):
 
     # Generate sigmas for each timestep
     for itime in range(ntime):
-        #of_tmp = tdir.filename()
-        of_tmp = './tmp.nc'
+        of_tmp = tdir.filename()
+        #of_tmp = './tmp.nc'
         get_von_Mises_stress(
             ns481_grid, velocity_file,
             of_tmp, tdir,

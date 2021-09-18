@@ -2,7 +2,7 @@ import numpy as np
 import netCDF4
 import os,subprocess
 from cdo import Cdo
-from uafgi import nsidc,cgutil,gdalutil,shapelyutil
+from uafgi import cgutil,gdalutil,shapelyutil
 from uafgi import giutil,cdoutil,make,ioutil,gicollections
 import pandas as pd
 import skimage.segmentation
