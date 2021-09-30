@@ -1,3 +1,4 @@
+import netCDF4
 import bisect
 import re
 import cf_units
