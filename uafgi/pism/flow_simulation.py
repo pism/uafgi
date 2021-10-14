@@ -12,6 +12,7 @@ import netCDF4
 import PISM
 import shapely.geometry
 import traceback
+import cf_units
 
 blackout_types = {
     ('shapely.geometry.multipoint', 'MultiPoint'),
@@ -224,9 +225,8 @@ def get_von_Mises_stress(ns481_grid, velocity_file, output_file, tdir, **kwargs)
     return run_pism(*args, **kwargs2)
 
 # ==========================================================================
-def get_von_Mises_stress_gimpdem(ns481_grid, velocity_file, output_file, tdir,
+def get_von_Mises_stress_gimpdem(itime, ns481_grid, velocity_file, output_file, tdir,
     dry_run=False, attrs=dict(),
-    itime=None, year=None,
     **pism_kwargs0):
 
     """Clean sheet replacement for get_von_Mises_stress().
@@ -250,10 +250,6 @@ def get_von_Mises_stress_gimpdem(ns481_grid, velocity_file, output_file, tdir,
         Row of a Pandas Dataframe, to write to output file
     itime: int
         Index into time dimension of velocity file
-        NOTE: Either set year or itime
-    year: int
-        Year (of time dimension) to use
-        NOTE: Either set year or itime
     dt_s: [s]
         Length of time to run for
     remove_downstream_ice:
@@ -270,25 +266,21 @@ def get_von_Mises_stress_gimpdem(ns481_grid, velocity_file, output_file, tdir,
     # Run only briefly
     dt_s = 100.
     # PISM Variables not needed in final output
-    delete_vars = {'ice_area_specific_volume', 'thk', 'total_retreat_rate', 'flux_divergence'}
+    delete_vars = {'ice_area_specific_volume', 'total_retreat_rate', 'flux_divergence'}
 
 
     # ============ Determine input/output filenames
-
     # Determine the local grid
     grid_file = uafgi.data.measures_grid_file(ns481_grid)
     grid_info = gdalutil.FileInfo(grid_file)
 
-
-    # Use to construct Makefile rules
+    # Return input/output filenames without running full function.
     if dry_run:
         inputs = [grid_file, bedmachine_file0, gimpdem_file0, velocity_file]
         outputs = [output_file_raw]
         return inputs, outputs
 
     # ============================================
-
-
     # Get total kwargs to use for PISM
     default_kwargs = dict(calving0.FrontEvolution.default_kwargs.items())
     default_kwargs['min_ice_thickness'] = 50.0    # See TODO below
@@ -302,6 +294,7 @@ def get_von_Mises_stress_gimpdem(ns481_grid, velocity_file, output_file, tdir,
     # Use Gimp DEM Elevations
     with netCDF4.Dataset(gimpdem_file0, 'r') as nc:
         elevation = nc.variables['elevation'][:]
+
     # ...merged into Bedmachine file
     with netCDF4.Dataset(bedmachine_file0, 'r') as ncin:
         schema = ncutil.Schema(ncin)
@@ -314,15 +307,18 @@ def get_von_Mises_stress_gimpdem(ns481_grid, velocity_file, output_file, tdir,
             schema.copy(ncin, ncout)
 
             # Compute our own thickness
-            ncout.variables['thickness'][:] = elevation - ncin.variables['bed'][:]
+            thk = elevation - ncin.variables['bed'][:]
+            thk[thk<0.] = 0.
+            ncout.variables['thickness'][:] = thk
+
     # -------------------------------------------------
     # Obtain start and end time in PISM units (seconds)
     with netCDF4.Dataset(velocity_file) as nc:
         nctime = nc.variables['time']
-        time_units = cf_units.Unit(nctime.units, nctime.calendar)
-        time_units_s = cfutil.replace_reftime_unit(time_units, 'seconds')
-        t0_py = time_units.num2date(nctime[0])    # Python-format date
-        t0_s = time_units_s.date2num(t0_py)
+        time_unit = cf_units.Unit(nctime.units, nctime.calendar)
+        time_unit_s = cfutil.replace_reftime_unit(time_unit, 'seconds')
+        t0_py = time_unit.num2date(nctime[itime])    # Python-format date
+        t0_s = time_unit_s.date2num(t0_py)
         t1_s = t0_s + dt_s
     # ---------------------------------------------------------------
 
@@ -339,7 +335,7 @@ def get_von_Mises_stress_gimpdem(ns481_grid, velocity_file, output_file, tdir,
         sys.stdout.flush()
         output = PISM.util.prepare_output(output_file3, append_time=False)
 
-        # TODO: Add a time_units and calendar argument to prepare_output()
+        # TODO: Add a time_unit and calendar argument to prepare_output()
         # https://github.com/pism/pism/commit/1cd1719189f1155bf56b4488338f1d6e53c29659
 
         #### I need to mimic this: Ross_combined.nc plus the script that made it
@@ -385,7 +381,8 @@ def get_von_Mises_stress_gimpdem(ns481_grid, velocity_file, output_file, tdir,
 
     # ----------------------- Post-processing
     output_file_tmp = tdir.filename()
-    pismutil.fix_output(output_file3, exception, fb.time_units_s, output_file_tmp, delete_vars=delete_vars)
+    pismutil.fix_output(output_file3, exception, time_unit_s, output_file_tmp, delete_vars=delete_vars)
+#    output_file_tmp = output_file3
 
     with netCDF4.Dataset(output_file_tmp, 'a') as nc:
 
@@ -393,7 +390,7 @@ def get_von_Mises_stress_gimpdem(ns481_grid, velocity_file, output_file, tdir,
         nc.creator = 'flow_simulation.py'
         nc.ns481_grid = ns481_grid
         nc.velocity_file = velocity_file
-        nc.year = year
+#        nc.year = year
         for key,val in pism_kwargs0.items():
             nc.setncattr(key,val)
 
@@ -459,13 +456,11 @@ def compute_sigma(velocity_file, ofname, tdir):
     for itime in range(ntime):
         of_tmp = tdir.filename()
         #of_tmp = './tmp.nc'
-        get_von_Mises_stress(
+        get_von_Mises_stress_gimpdem(itime,
             ns481_grid, velocity_file,
             of_tmp, tdir,
-            itime=itime,
             dry_run=False,
-            sigma_max=1.e6,    # Doesn't matter
-            dt_s=100.)            # Really short
+            sigma_max=1.e6)    # Doesn't matter
 
         # Copy from temporary file into final output file
         eig = list()
@@ -499,7 +494,7 @@ def compute_sigma_rule(itslive_nc, odir):
         [itslive_nc], [ofname])
 
 # ===============================================================
-FlowRateRet = collections.namedtuple('FlowRateRet', ('flux', 'up_area'))
+FlowRateRet = collections.namedtuple('FlowRateRet', ('flux', 'ncells', 'up_area'))
 def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, itslive_nc=None, debug_out_nc=None):
     """
     grid:
@@ -545,7 +540,7 @@ def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, itslive_nc=None
     vv[kill_mask] = 0
 
     # Compute flux across the boundary (and length of the boundary)
-    flux = pismutil.flux_across_terminus(mask, fjord, uu, vv, grid_info.dx, grid_info.dy)
+    flux,ncells = pismutil.flux_across_terminus(mask, fjord, uu, vv, grid_info.dx, grid_info.dy)
 
     # ------------------------------------------------------------------------
     if itslive_nc is not None:
@@ -568,7 +563,7 @@ def flow_rate(grid, fjord_gd, up_loc_gd, terminus, uu, vv, mask, itslive_nc=None
 
     tflux = np.sum(flux)    # Flux across boundary [m^2 s-1]
     
-    return FlowRateRet(tflux, up_area)
+    return FlowRateRet(tflux, ncells, up_area)
 
 def flow_rate2(row, w21t, Merger, year0, year1):
     """Simplified API for multiple termini: computes velocity and
@@ -657,7 +652,7 @@ def flow_rate2(row, w21t, Merger, year0, year1):
     return pd.DataFrame(data=orows)
 
 
-FlowRate3Ret = collections.namedtuple('FlowRateRet3', ('aflux', 'sflux', 'up_area'))
+FlowRate3Ret = collections.namedtuple('FlowRateRet3', ('aflux', 'sflux', 'ncells', 'up_area'))
 def flow_rate3(grid, bedmachine_file, fj_poly, velocity_file, sigma_file, itime, termini, up_loc_gd):
     """
     velocity_file:
@@ -712,7 +707,7 @@ def flow_rate3(grid, bedmachine_file, fj_poly, velocity_file, sigma_file, itime,
             uu*sigma, vv*sigma,
             mask, **debug_kwargs)
 
-        answer = FlowRate3Ret(fra.flux, frs.flux, fra.up_area)
+        answer = FlowRate3Ret(fra.flux, frs.flux, fra.ncells, fra.up_area)
 #        print(answer.sflux/answer.aflux, answer)
         ret.append(answer)
 

@@ -66,6 +66,9 @@ def flux_across_terminus(mask, fjord, uvel, vvel, dx, dy):
         flux = np.sum(np.sum(fluxmap))
     """
 
+    # Areas we lack data over the terminus
+#    x = np.logical_and(uvel == 0., uvel==0.).astype(flow)
+
     # Flux to the East: [m^2 s-1] ("horizontal sheet extruding through terminus")
     maskX = mask.copy()
     maskX[:,:-1] = mask[:,1:]    # Shift west by 1 pixel
@@ -73,8 +76,10 @@ def flux_across_terminus(mask, fjord, uvel, vvel, dx, dy):
     fjordX[:,:-1] = fjord[:,1:]    # Shift west by 1 pixel
     cells = np.logical_and.reduce(
         (fjord, fjordX, np.isin(mask,MULTIMASK_ICE), maskX==MASK_ICE_FREE_OCEAN))
+    ncellsE = np.sum(cells)
     #                  [m s-1]    [0/1]            [m]
     fluxE = np.maximum(uvel * cells.astype(float) * dy, 0.0)
+#    nzE =  np.maximum(uvel * cells.astype(float) * dy, 0.0)
 
     # Flux to the West
     maskX = mask.copy()
@@ -83,6 +88,7 @@ def flux_across_terminus(mask, fjord, uvel, vvel, dx, dy):
     fjordX[:,1:] = fjord[:,:-1]    # Shift east by 1 pixel
     cells = np.logical_and.reduce(
         (fjord, fjordX, np.isin(mask,MULTIMASK_ICE), maskX==MASK_ICE_FREE_OCEAN))
+    ncellsW = np.sum(cells)
     fluxW = np.maximum(-uvel * cells.astype(float), 0.)
 
     # Flux to the North
@@ -92,6 +98,7 @@ def flux_across_terminus(mask, fjord, uvel, vvel, dx, dy):
     fjordX[:-1,:] = fjord[1:,:]    # Shift south by 1 pixel
     cells = np.logical_and.reduce(
         (fjord, fjordX, np.isin(mask,MULTIMASK_ICE), maskX==MASK_ICE_FREE_OCEAN))
+    ncellsN = np.sum(cells)
     fluxN = np.maximum(vvel * cells.astype(float) * dx, 0.0)
 
     # Flux to the South
@@ -101,6 +108,9 @@ def flux_across_terminus(mask, fjord, uvel, vvel, dx, dy):
     fjordX[1:,:] = fjord[:-1,:]    # Shift north by 1 pixel
     cells = np.logical_and.reduce(
         (fjord, fjordX, np.isin(mask,MULTIMASK_ICE), maskX==MASK_ICE_FREE_OCEAN))
+    ncellsS = np.sum(cells)
     fluxS = np.maximum(-vvel * cells.astype(float) * dx, 0.0)
 
-    return fluxE + fluxW + fluxN + fluxS
+    return \
+        fluxE + fluxW + fluxN + fluxS, \
+        ncellsE + ncellsW + ncellsN + ncellsS    # Number of segments over which flux is integrated
