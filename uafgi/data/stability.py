@@ -1,6 +1,8 @@
 import pandas as pd
 import uafgi.data
 from uafgi import shputil,pdutil
+import uafgi.data.future_termini
+import uafgi.data.fj
 
 def _csv_to_tuple(val):
     """Converts key column value from comma-separated format to standard
@@ -84,7 +86,7 @@ def read_overrides():
         ['w21_key', 'bkm15_key'], 'w21_key', uafgi.data.wkt.nsidc_ps_north)
     return over
 
-def read_select():
+def read_select(map_wkt):
 
     # Read our master list of glaciers
     select = pdutil.ExtDf.read_pickle(uafgi.data.join_outputs('stability/01_select.dfx'))
