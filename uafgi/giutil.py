@@ -438,3 +438,23 @@ def autoinit():
     paramnames = frame.f_code.co_varnames[1:] # ignore self
     for name in paramnames:
         setattr(self, name, params[name])
+# -----------------------------------------------------------
+# https://stackoverflow.com/questions/40367461/intersection-of-two-lists-of-ranges-in-python/40368603
+def intersect_ranges(A, B):
+
+    """Given two lists of ranges [low,high), finds the intersection of
+    each range in A with each range in B.
+
+    Returns: [(aix, bix, r0, r1), ...]
+        One tuple for each intersection.
+        aix:
+            Index of range in A for which this overlaps.
+        bix:
+            Index of rnage in B for which this overlaps.
+        r0, r1:
+            Value of the overlapping range between A[aix] and B[bix]
+    """
+    return [
+        (aix, bix, max(first[0], second[0]), min(first[1], second[1]))
+        for aix,first in enumerate(A) for bix,second in enumerate(B)
+        if max(first[0], second[0]) <= min(first[1], second[1])]
