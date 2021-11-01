@@ -349,7 +349,8 @@ def glacier_cumulative_df(data_fname):
 
     # Calving is the residual of advection, frontal retreat, front
     # undercutting and thinning-induced retreat
-    df['calving'] = df.sum(axis=1)
+#    df['calving'] = df.sum(axis=1)
+    df['calving'] = -(df['ice_advection'] + df['ice_front_undercutting'] + df['thinning_induced_retreat'] - df['ice_front_retreat'])
 
     return df
     
