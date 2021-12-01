@@ -401,14 +401,17 @@ def convert_var(nc, vname, sunit, **kwargs):
     return convert_to(nc.variables[vname], sunit, **kwargs)
         
 
-def get_attrs(ncvar):
+def getncattrs(ncvar):
     """Returns a dict of the attributes of a variable"""
     return {name: ncvar.getncattr(name) for name in ncvar.ncattrs()}
 
 _exclude = {'_FillValue'}
-def set_attrs(ncvar, attrs):
+def setncattrs(ncvar, attrs):
     """Sets a bunch of attributes on a variable"""
     for k,v in attrs.items():
         if k not in _exclude:
             ncvar.setncattr(k,v)
 
+# Backwards compatibility
+get_attrs = getncattrs
+set_attrs = setncattrs

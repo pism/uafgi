@@ -95,43 +95,14 @@ def index_slice(vals, v0,v1):
     return slice(i0,i1)
 
 
-class LonLatSubGrid:
-    """Defines items of LonLat grid to help write CF-compliant files, based on the grid cell centers."""
+class LonLatGrid:
+    """Defines items of global LonLat grid to help write CF-compliant files,
+    based on the grid cell centers."""
 
-    def __init__(self, lon_range, lat_range, longitude=None, latitude=None, sample_file=None):
-        """
-        lon_range: [min, max)
-            Longitude range to include in the output
-        lat_range: [min, max)
-            Latitude range to include in the output
-        longitude:
-            List/array of grid cell centers for the global grid
-        latitude:
-            List/array of grid cell centers for the global grid
-        sample_file:
-            (OPTIONAL) Get longitude and latitude from this file, then don't have to specify.
-        """
+    def __init__(self, longitude, latitude)
 
-        self.lon_range = lon_range
-        self.lat_range = lat_range
-
-        self.longitude = longitude
-        self.latitude = latitude
-        if sample_file is not None:
-            with netCDF4.Dataset(sample_file) as nc:
-                nc.set_always_mask(False)
-                self.longitude = nc.variables['longitude'][:]
-                self.latitude = nc.variables['latitude'][:]
-
-        # Determine area slices and overall dimensions
-        self.lonslice = index_slice(self.longitude, *lon_range)
-        self.nlon = len(range(*self.lonslice.indices(len(self.longitude))))
-        self.lon = self.longitude[self.lonslice]
-
-
-        self.latslice = index_slice(-self.latitude, -lat_range[1], -lat_range[0])  # Negation because latitude is highest to lowest
-        self.nlat = len(range(*self.latslice.indices(len(self.latitude))))
-        self.lat = self.latitude[self.latslice]
+        self.lon = longitude
+        self.lat = latitude
 
         # https://gdal.org/tutorials/geotransforms_tut.html
         self.dlon = self.lon[1] - self.lon[0]
@@ -140,39 +111,94 @@ class LonLatSubGrid:
             self.lon[0] - .5*self.dlon, self.dlon, 0,
             self.lat[0] - .5*self.dlat, 0, self.dlat]
 
-def write_wgs84(nc, geotransform, vname='crs'):
+    def subgrid(self, lon_range=(0,360), lat_range=(-90,90)):
+        """Returns a LonLatGrid that's a sub-grid of the current one."""
 
-    """Writes a CRS variable into the NetCDF file.  Other variables can
-    reference it with the `grid_mapping` attribute.
+        # Determine area slices and overall dimensions
+        lonslice = index_slice(self.lon, *lon_range)
+        latslice = index_slice(-self.lat, -lat_range[1], -lat_range[0])  # Negation because latitude is highest to lowest
 
-    geotransform:
-        Standard six items in list.
-        See LonLatSubGrid above
+        return LonLatGrid(self.lon[lonslice], self.lat[latslice])
 
-    Example:
-    ```
-        char crs ;
-                crs:grid_mapping_name = "latitude_longitude" ;
-                crs:long_name = "CRS definition" ;
-                crs:longitude_of_prime_meridian = 0. ;
-                crs:semi_major_axis = 6378137. ;
-                crs:inverse_flattening = 298.257223563 ;
-                crs:spatial_ref = "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]" ;
-                crs:GeoTransform = "-0.125 0.25 0 75.125 0 -0.25" ;
-        double tin(time, latitude, longitude) ;
-                tin:units = "degC" ;
-                tin:long_name = "2 metre temperature" ;
-                tin:grid_mapping = "crs" ;
-    ```"""
-    nccrs = nc.createVariable(vname, 'c')
-    # Standard WGS84 stuff
-    nccrs.grid_mapping_name = "latitude_longitude" ;
-    nccrs.long_name = "CRS definition" ;
-    nccrs.longitude_of_prime_meridian = 0. ;
-    nccrs.semi_major_axis = 6378137. ;
-    nccrs.inverse_flattening = 298.257223563 ;
-    nccrs.spatial_ref = "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]" ;
-    # Specific to this file
-    nccrs.GeoTransform = ' '.join(str(x) for x in geotransform)
 
-    return nccrs
+    @property
+    def nlat(self):
+        return len(self.lat))
+    @property
+    def nlon(self):
+        return len(self.lon))
+
+    def ncdef(self, nc, crs_vname='crs'):
+        """To set up a CF-compliant CRS in your NetCDF file, first call ncdef(),
+        then ncwrite().
+        """
+        nc.createDimension('longitude', self.nlon)
+        nc.createDimension('latitude', self.nlat)
+        nclon = nc.createVariable('longitude', 'd', ('longitude',))
+        nclat = nc.createVariable('latitude', 'd', ('latitude',))
+        nccrs = nc.createVariable(crs_vname, 'c')
+        ncutil.setncattrs(nccrs, self.wgs84_cf_attrs)
+
+    def ncwrite(self, nc, crs_vname='crs'):
+        nc.variables['longitude'][:] = self.lon
+        nc.variables['latitude'][:] = self.lat
+
+    @property
+    def wgs84_cf_attrs(self):
+        """Returns a dict of the attributes needed for a NetCDF CF-Compliant
+        CRS definition variable.
+
+        geotransform:
+            Standard six items in list.
+            See LonLatSubGrid above
+
+        Example:
+        ```
+            char crs ;
+                    crs:grid_mapping_name = "latitude_longitude" ;
+                    crs:long_name = "CRS definition" ;
+                    crs:longitude_of_prime_meridian = 0. ;
+                    crs:semi_major_axis = 6378137. ;
+                    crs:inverse_flattening = 298.257223563 ;
+                    crs:spatial_ref = "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]" ;
+                    crs:GeoTransform = "-0.125 0.25 0 75.125 0 -0.25" ;
+            double tin(time, latitude, longitude) ;
+                    tin:units = "degC" ;
+                    tin:long_name = "2 metre temperature" ;
+                    tin:grid_mapping = "crs" ;
+        ```"""
+
+
+        # Standard WGS84 stuff
+        return {
+            'grid_mapping_name': "latitude_longitude" ;
+            'long_name': "CRS definition" ;
+            'longitude_of_prime_meridian': 0. ;
+            'semi_major_axis': 6378137. ;
+            'inverse_flattening': 298.257223563 ;
+            'spatial_ref': "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]" ;
+            # Specific to this file
+            'GeoTransform': ' '.join(str(x) for x in self.geotransform)
+        }
+
+
+def lonlat_from_samplefile(sample_file):
+    """Creates a LonLatGrid based on the longitude and latitude variables
+    in an existing file (does not need any other CF-cocmpliant stuff)"""
+
+    # Read longitude and latitude from sample file
+    with netCDF4.Dataset(sample_file) as nc:
+        nc.set_always_mask(False)
+        longitude = nc.variables['longitude'][:]
+        latitude = nc.variables['latitude'][:]
+
+    return LonLatGrid(longitude, latitude)
+
+def lonlat_by_size(nlon, nlat):
+
+    """Creates a global LonLatGrid based on the number of longitude and
+    latitude points (and some assumptions)"""
+    lon = np.linspace(0,360,num=nlon, endpoint=False)
+    lat = np.linspace(-90,90,num=nlat, endpoint=True)
+
+    return LonLatGrid(lon, lat)
