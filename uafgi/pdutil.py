@@ -506,7 +506,7 @@ def group_and_tuplelist(df, group_col, name_and_colss):
     """Groups a dataframe; and then creates a new dataframe with one row per group, containing columns:
         1) group_col (1 column string, or list of columns)
         2) For each (name, cols) in name_and_colss:
-           One column called <name>, whose value is a zippedl ist from cols
+           One column called <name>, whose value is a zipped list from cols
 
     Example:
         pdutil.group_and_tuplelist(w21t.df, ['w21t_Glacier'],
