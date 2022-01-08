@@ -13,12 +13,12 @@ def mod_date(path):
         return None
 
 class Rule(gicollections.MutableNamedTuple):
-    __slots__ = ('action', 'saction', 'inputs', 'outputs', 'precious', 'force')
+    __slots__ = ('action', 'saction', 'inputs', 'outputs', 'precious', 'force', 'require_inputs')
 
     # action() can be called like a function
 
-    def __init__(self, action, inputs, outputs, precious=False, force=False):
-        super().__init__(action, str(action), inputs, outputs, precious, force)
+    def __init__(self, action, inputs, outputs, precious=False, force=False, require_inputs=True):
+        super().__init__(action, str(action), inputs, outputs, precious, force, require_inputs)
 
     def __call__(self):
         """Useful for one-off calls of a rule, outside of a Makefile"""
@@ -48,13 +48,9 @@ class Makefile(object):
         self.rule_list = list()    # Straight list of all rules [rule, ...]
         self.rules = dict()    # {target : rule}
 
-#    def add(self, action, inputs, outputs):
-#        rule = Rule(inputs, outputs, action, False)
-#        if action is not None:
-#            # Dummy rules aren't added to the dependency DAG
-#            for output in outputs:
-#                self.rules[output] = rule
-#        return rule
+    def clear(self):
+        self.rule_list.clear()
+        self.rules.clear()
 
     def add(self, rule):
         # Don't add if already added
@@ -172,7 +168,7 @@ class Makefile(object):
                     # Write the rule in the Makefile
                     mout.write('{} : {}{}\n'.format(
                         ' '.join(rule.outputs),
-                        ' '.join(rule.inputs),
+                        ' '.join(rule.inputs) if rule.require_inputs else '',
                         ' FORCE' if rule.force else ''))
                     mout.write("\t. {}; {} -c 'import uafgi.exe.runrule' {}\n\n".format(env_sh, _pythone, thunk_fname))
 

@@ -24,6 +24,7 @@ import sys
 import collections.abc
 import types
 import string
+import bisect
 
 class Struct(object):
     """Convert a dict() to a struct."""
@@ -448,13 +449,104 @@ def intersect_ranges(A, B):
     Returns: [(aix, bix, r0, r1), ...]
         One tuple for each intersection.
         aix:
-            Index of range in A for which this overlaps.
+            Index of range in A for which this is an overlap.
         bix:
-            Index of rnage in B for which this overlaps.
+            Index of range in B for which this is an overlap.
         r0, r1:
             Value of the overlapping range between A[aix] and B[bix]
     """
-    return [
-        (aix, bix, max(first[0], second[0]), min(first[1], second[1]))
-        for aix,first in enumerate(A) for bix,second in enumerate(B)
-        if max(first[0], second[0]) <= min(first[1], second[1])]
+
+    ret = list()
+    for aix,arange in enumerate(A):
+        for bix,brange in enumerate(B):
+            max0 = max(arange[0], brange[0])
+            min1 = min(arange[1], brange[1])
+            print('max0, min1 ', max0, min1)
+            if max0 <= min1:
+                ret.append((aix, bix, max0, min1))
+
+    return ret
+
+#    return [
+#        (aix, bix, max(first[0], second[0]), min(first[1], second[1]))
+#        for aix,first in enumerate(A) for bix,second in enumerate(B)
+#        if max(first[0], second[0]) <= min(first[1], second[1])]
+
+def index_slice(vals, v0,v1):
+    """Finds a range of indices [i0,i1) that encompases the range of values [v0,v1]
+    Returns: i0,i1"""
+    i0 = bisect.bisect_left(vals,v0)
+    i1 = bisect.bisect_left(vals,v1)
+#    i1 = bisect.bisect_right(vals,v1)
+    return slice(i0,i1)
+
+def intersect_indices(vals0, vals1):
+
+    """Finds index slices for vals0 and vals1 that provide equal
+    overlapping ranges.
+
+    vals0, vals1:
+        List of values.  Eg: longitudes or latitudes from a NetCDF file
+    Returns: (slice0, slice1)
+    """
+
+    # See if we're descending or descending
+    descending0 = (vals0[-1] < vals0[0])
+    descending1 = (vals1[-1] < vals1[0])
+    if descending0 != descending1:
+        raise ValueError('vals0 and vals1 must both be ascending or descending')
+
+
+    valss = (vals0, vals1)
+
+    if descending0:
+        valss = [np.flip(vals) for vals in valss]
+
+    # Find ranges of real-valued items
+    _ret = intersect_ranges(*[
+        ((vals[0],vals[-1]*2 - vals[-2]),)    # [low,high)
+        for vals in valss])
+    rval = _ret[0][2:]
+
+    slices = [index_slice(vals, *rval) for vals in valss]
+
+    # Fix up ranges if we're descending
+    if descending0:
+        slices = [
+            slice(n-s.stop, n-s.start)
+            for s,n in zip(slices, [len(vals) for vals in valss])]
+
+    return slices
+
+
+
+
+#    # Intersecting range of values: [low,high]
+#    if descending0:
+#        ret = intersect_ranges(
+#            [(vals0[0],vals0[-1])],    # [low,high]
+#            [(vals1[0],vals1[-1])])    # [low,high]
+#
+#        rval = ret[0][2:]
+#
+#        return (
+#            index_slice(vals0, *rval),
+#            index_slice(vals1, *rval))
+#
+#    else:
+#        ret = intersect_ranges(
+#            [(vals0[-1],vals0[0])],    # [low,high]
+#            [(vals1[-1],vals1[0])])    # [low,high]
+#
+#        rval = ret[0][2:]
+#
+#        # Slices in our reversed arrays
+#        slices = list()
+#        for vals in (vals0,vals1):
+#            slice_descending = index_slice(np.flip(vals), *rval)
+#            n = len(vals)
+#            print('slice_descending ',slice_descending)
+#            # Convert to slice in actual array
+#            slices.append(slice(n-slice_descending.stop+1, n-slice_descending.start))
+#
+#        return slices

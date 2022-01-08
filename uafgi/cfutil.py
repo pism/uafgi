@@ -1,8 +1,8 @@
+from osgeo import osr#,ogr,gdal
 import netCDF4
-import bisect
 import re
 import cf_units
-from uafgi import ncutil
+from uafgi import ncutil,giutil
 import datetime
 import numpy as np
 
@@ -87,19 +87,15 @@ def convert(ncarray, from_unit, to_unit):
 
     return from_unit.convert(ncarray, to_unit)
 
-def index_slice(vals, v0,v1):
-    """Finds a range of indices [i0,i1) that encompases the range of values [v0,v1]
-    Returns: i0,i1"""
-    i0 = bisect.bisect_left(vals,v0)
-    i1 = bisect.bisect_right(vals,v1)
-    return slice(i0,i1)
 
+
+_WGS84_WKT = "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]"
 
 class LonLatGrid:
     """Defines items of global LonLat grid to help write CF-compliant files,
     based on the grid cell centers."""
 
-    def __init__(self, longitude, latitude)
+    def __init__(self, longitude, latitude):
 
         self.lon = longitude
         self.lat = latitude
@@ -115,18 +111,38 @@ class LonLatGrid:
         """Returns a LonLatGrid that's a sub-grid of the current one."""
 
         # Determine area slices and overall dimensions
-        lonslice = index_slice(self.lon, *lon_range)
-        latslice = index_slice(-self.lat, -lat_range[1], -lat_range[0])  # Negation because latitude is highest to lowest
+        lonslice = giutil.index_slice(self.lon, *lon_range)
+        latslice = giutil.index_slice(-self.lat, -lat_range[1], -lat_range[0])  # Negation because latitude is highest to lowest
 
         return LonLatGrid(self.lon[lonslice], self.lat[latslice])
 
+    # -----------------------------------------------------
+    # Implement the "GeoGrid" Duck Typing API
+    # See also: gdalutil.FileInfo
+    @property
+    def nx(self):
+        return len(self.lon)
+
+    @property
+    def ny(self):
+        return len(self.lat)
+
+    # self.geotransform is already a property
+
+    @property
+    def srs(self):
+        return osr.SpatialReference(wkt=_WGS84_WKT)
+
+
+    # -----------------------------------------------------
 
     @property
     def nlat(self):
-        return len(self.lat))
+        return len(self.lat)
+
     @property
     def nlon(self):
-        return len(self.lon))
+        return len(self.lon)
 
     def ncdef(self, nc, crs_vname='crs'):
         """To set up a CF-compliant CRS in your NetCDF file, first call ncdef(),
@@ -140,6 +156,7 @@ class LonLatGrid:
         ncutil.setncattrs(nccrs, self.wgs84_cf_attrs)
 
     def ncwrite(self, nc, crs_vname='crs'):
+        """Must be called with same crs_vname as ncdef()"""
         nc.variables['longitude'][:] = self.lon
         nc.variables['latitude'][:] = self.lat
 
@@ -171,18 +188,18 @@ class LonLatGrid:
 
         # Standard WGS84 stuff
         return {
-            'grid_mapping_name': "latitude_longitude" ;
-            'long_name': "CRS definition" ;
-            'longitude_of_prime_meridian': 0. ;
-            'semi_major_axis': 6378137. ;
-            'inverse_flattening': 298.257223563 ;
-            'spatial_ref': "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]" ;
+            'grid_mapping_name': "latitude_longitude",
+            'long_name': "CRS definition",
+            'longitude_of_prime_meridian': 0.,
+            'semi_major_axis': 6378137.,
+            'inverse_flattening': 298.257223563,
+            'spatial_ref': _WGS84_WKT,
             # Specific to this file
             'GeoTransform': ' '.join(str(x) for x in self.geotransform)
         }
 
 
-def lonlat_from_samplefile(sample_file):
+def lonlat_from_sample(sample_file):
     """Creates a LonLatGrid based on the longitude and latitude variables
     in an existing file (does not need any other CF-cocmpliant stuff)"""
 

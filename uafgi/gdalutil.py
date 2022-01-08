@@ -68,7 +68,7 @@ class FileInfo(object):
             Min, max of region in the file
         self.dx:
             Grid spacing in x direction
-        welf.srs: osr.SpatialReference
+        self.srs: osr.SpatialReference
             GDAL Coordinate reference system (CRS) used in the file
         geotransform: list
             GDAL domain used in this file
@@ -136,10 +136,24 @@ class FileInfo(object):
                 self.times_s = [self.time_units.convert(t_d, self.time_units_s)
                     for t_d in self.times]
 
+    # -----------------------------------------------------
+    # Implement the "GeoGrid" Duck Typing API
+    # See also: cfutil.LonlatGrid
+    @property
+    def nx(self):
+        return self.x.n
+
+    @property
+    def ny(self):
+        return self.y.n
+
+    # self.geotransform is already a property
+
     @property
     def srs(self):
         # Use srs.ExportToWkt() to get back to Wkt string
         return osr.SpatialReference(wkt=self.wkt)
+    # -----------------------------------------------------
 
 
     def to_xy(self, i, j):
@@ -170,7 +184,7 @@ def clone_geometry(drivername, filename, grid_info, nBands, eType):
         Name of GDAL driver used to create dataset
     filename:
         Filename for dataset (or '' if driver type 'MEM')
-    grid_info:
+    grid_info: GeoGrid (a Duck Type; for implementations grep for GeoGrid)
         Result of FileInfo() from an existing raster file
     nBands:
         Number of bankds
@@ -181,12 +195,18 @@ def clone_geometry(drivername, filename, grid_info, nBands, eType):
     """
 
     driver = gdal.GetDriverByName(drivername)
-    ds = driver.Create(filename, grid_info.x.n, grid_info.y.n, nBands, eType)
+    ds = driver.Create(filename, grid_info.nx, grid_info.ny, nBands, eType)
     ds.SetSpatialRef(grid_info.srs)
     ds.SetGeoTransform(grid_info.geotransform)
     return ds
 
 
+# NOTE: gdal_rasterize requires shapefile in meters, not degrees.
+# And it requires the shapefile and raster CRS to be the same.
+# ===> Not able to rasterize to spherical rasters
+# See: Python Geospatial Analysis Cookbook
+#      By Michael Diener
+#      p. 60
 
 def rasterize_polygons(polygon_ds, grid_info):
     """Rasterizes all polygons from polygon_ds into a single raster, which
@@ -204,6 +224,8 @@ def rasterize_polygons(polygon_ds, grid_info):
     Returns: np.ndarray
         Mask equals 1 inside the polygons, and 0 outside.
     """
+
+    # http://www2.geog.ucl.ac.uk/~plewis/geogg122_current/_build/html/ChapterX_GDAL/OGR_Python.html
 
     # Reproject original polygon file to a new (internal) dataset
     # src_ds = ogr.GetDriverByName('ESRI Shapefile').CreateDataSource('x.shp')
