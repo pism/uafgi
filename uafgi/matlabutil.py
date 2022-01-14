@@ -16,14 +16,14 @@ def _unnest(obj, compound='_'):
     """
 
     if isinstance(obj, list):
-        return [unnest(o) for o in obj]
+        return [_unnest(o) for o in obj]
     is_tuple = (compound == 'tuple')
 
     # It's a dict
     if isinstance(obj, dict):
         ret = dict()
         for k0,v0 in obj.items():
-            val0 = unnest(v0)
+            val0 = _unnest(v0)
 
             if isinstance(val0, dict):
                 for k1,v1 in val0.items():
