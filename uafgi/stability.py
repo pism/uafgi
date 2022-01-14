@@ -179,6 +179,9 @@ def select_glaciers():
         ns642x, 'ns642_points', select, 'fj_poly').swap()
     select = match.left_join(overrides=over)
 
+    # ------ Join with Slater et al (2019) work
+
+
     return select
 
 def retreat_history(select):
