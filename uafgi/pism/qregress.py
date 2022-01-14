@@ -7,33 +7,45 @@ import statsmodels.api
 import statsmodels.formula.api
 from uafgi.data import w21 as d_w21
 from uafgi import pdutil
+import copy
 
 # -------------------------------------------------------------------
 def fit_sigma_maxs(select, velterm_df):
     """Determine the sigma_max that fits the data for each
     velocity/terminus combo."""
 
+
+    # Use only concurrent velocity / terminus measurements; and average within each year
+    vtdf = copy.copy(velterm_df)
+    vtdf['ivel_year'] = vtdf['vel_year'].apply(np.floor)
+    vtdf['iterm_year'] = vtdf['term_year'].apply(np.floor)
+    vtdf = vtdf[vtdf.ivel_year == vtdf.iterm_year]
+    #vtdf = vtdf.groupby('ivel_year').mean().reset_index()
+    vtdf = vtdf[['up_area', 'aflux', 'sflux', 'glacier_id', 'ivel_year']]
+    vtdf = vtdf.rename(columns={'ivel_year':'year'})
+
+#    rows = list()
     dfs = list()
     for _,selrow in select.df.iterrows():
-        adv = velterm_df[velterm_df.glacier_id == selrow.w21t_glacier_number]
-        adv['aflux'] *= .001
-        adv['sflux'] *= .001
+        adv = vtdf[vtdf.glacier_id == selrow.w21t_glacier_number]
         
         df = d_w21.glacier_rate_df(selrow.w21_data_fname)
         df = df.reset_index()
 
-        df = pdutil.merge_nodups(df, adv, left_on='time', right_on='term_year', how='left').drop('term_year',axis=1)
+        df = pdutil.merge_nodups(df, adv, left_on='time', right_on='year', how='left').drop('year',axis=1)
 #        df = pdutil.merge_nodups(df, adv, left_on='time', right_on='term_year', how='left').drop('year',axis=1)
 
-        df['sflux1'] = df['sflux'] * df['ice_advection'] / df['aflux']
+        #df['sflux1'] = df['sflux'] * df['ice_advection'] / df['aflux']
 
         df['sigma_max'] = (df['sflux'] * df['ice_advection']) / (df['aflux'] * -df['calving'])
-        df = df.set_index('time')
-        df = df.dropna()
-        
+        df = df.reset_index()
+        df = df[['glacier_id', 'time', 'sigma_max']].dropna()
+#        rows.append({'glacier_id': selrow.w21t_glacier_number, 'sigma_max_mean': df.sigma_max.mean(), 'sigma_max_std': df.sigma_max.std()})
         dfs.append(df)
+#        break
 
     return pd.concat(dfs)
+#    return pd.DataFrame(rows)
 # -------------------------------------------------------------------
 def _selcols(select, y0, y1):
     y_end = y1-1
@@ -58,7 +70,7 @@ def wood_q4tf(select):
         wdfs[0] = dataframe for glaciers in regions SE,SW,CE,CW,NE
         wdfs[1] = dataframe for glaciers in regions N,NW
 
-    Retunred columns: 
+    Returned columns: 
         w21t_Glacier
         w21t_glacier_number
         w21_coast
@@ -249,9 +261,9 @@ def regress_kappas(mdfs):
         dfg = mdf.groupby(['w21t_Glacier','w21t_glacier_number'])
         kappas = list()
         for _,df in dfg:
-            results = statsmodels.formula.api.ols('up_len ~ q4tf', data=df).fit()
-            #print(results.summary())
-            kappa = results.params.q4tf   # Kappa named after regression in paper
+            regr = statsmodels.formula.api.ols('up_len ~ q4tf', data=df).fit()
+            #print(regr.summary())
+            kappa = regr.params.q4tf   # Kappa named after regression in paper
             kappas.append(kappa)
         ##    #lr = sklearn.liear_model.LinearRegression()
          #   lr.fit()

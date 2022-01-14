@@ -155,6 +155,19 @@ class FileInfo(object):
         return osr.SpatialReference(wkt=self.wkt)
     # -----------------------------------------------------
 
+    @property
+    def extents(self):
+        """Provide extents for Cartopy / Matplotlib's ax.set_extent()"""
+        gt = self.geotransform
+        x0 = gt[0]
+        x1 = x0 + gt[1] * self.nx
+
+        y0 = gt[3]
+        y1 = y0 + gt[5] * self.ny
+
+
+        return [x0,x1,y0,y1]
+
 
     def to_xy(self, i, j):
         """Converts an (i,j) pixel address to an (x,y) geographic value"""

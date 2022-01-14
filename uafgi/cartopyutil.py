@@ -1,3 +1,4 @@
+import collections
 import pyproj
 import numpy as np
 import shapely.geometry
@@ -390,3 +391,33 @@ def add_osgb_scalebar(ax, at_x=(0.1, 0.4), at_y=(0.05, 0.075), max_stripes=5):
                  verticalalignment='top',
                  horizontalalignment='center',
                  fontproperties=font_props)
+
+MapInfo = collections.namedtuple('MapInfo', ('crs', 'extents'))
+def nc_mapinfo(nc, ncvarname):
+    """Setup a map from CF-compliant stuff"""
+
+    nx = len(nc.dimensions['x'])
+    ny = len(nc.dimensions['y'])
+
+    ncvar = nc[ncvarname]
+    map_crs = crs(ncvar.spatial_ref)
+
+#    map_crs = cartopy.crs.Stereographic(
+#        central_latitude=90,
+#        central_longitude=-45,
+#        false_easting=0, false_northing=0,
+#        true_scale_latitude=70, globe=None)
+
+    print('map_crs ', map_crs)
+
+    # Read extents from the NetCDF geotransform
+    geotransform = [float(x) for x in ncvar.GeoTransform.split(' ') if x != '']
+    x0 = geotransform[0]
+    x1 = x0 + geotransform[1] * nx
+    y0 = geotransform[3]
+    y1 = y0 + geotransform[5] * ny
+    extents = [x0,x1,y0,y1]
+
+    return MapInfo(map_crs, extents)
+#    ax.set_extent(extents=extents, crs=map_crs)
+#    return map_crs
