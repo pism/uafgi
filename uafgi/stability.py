@@ -18,6 +18,7 @@ import uafgi.data.mwp
 import uafgi.data.ns481
 import uafgi.data.ns642
 import uafgi.data.w21 as d_w21
+from uafgi.data import d_sl19
 import uafgi.data.wkt
 from uafgi.data import greenland,stability
 import pickle
@@ -111,6 +112,7 @@ def select_glaciers():
     # PS: if there's a problem, ret['glaciersdup'] and ret['fjdup'] will be set; see 'fjdup.shp' file.
     select.df = select.df.dropna(subset=['fj_fid'])    # Drop glaciers without a hand-drawn fjord
 
+    # ----------------------------------------------------------
     # Obtain set of local MEAUSRES grids on Greenland
     ns481 = uafgi.data.ns481.read(uafgi.data.wkt.nsidc_ps_north)
 
@@ -150,6 +152,20 @@ def select_glaciers():
         print('Fjords with duplicate upstream points:\n{}'.format(df))
 
     # -------------------------------------------------------------
+    # Join with bkm15
+    bkm15 = uafgi.data.bkm15.read(uafgi.data.wkt.nsidc_ps_north)
+    match = pdutil.match_point_poly(bkm15, 'bkm15_loc', select, 'fj_poly', left_cols=['bkm15_allnames']).swap()
+    select = match.left_join(overrides=over)
+
+# Not sure what purpose this serves.
+#    select.df = pdutil.override_cols(select.df, over, 'w21_key',
+#        [('bkm15_lat', 'lat', 'lat'),
+#         ('bkm15_lon', 'lon', 'lon'),
+#         ('bkm15_loc', 'loc', 'loc')])
+
+    # ----------------------------------------------------------
+
+
     # Get historical termini
 
 
@@ -180,7 +196,37 @@ def select_glaciers():
     select = match.left_join(overrides=over)
 
     # ------ Join with Slater et al (2019) work
+    sl19 = d_sl19.read(map_wkt)
 
+    # Join on bkm15_id to get sl19_rignotid
+#    print('AA1 ', len(select.df))
+    select.df = pd.merge(select.df, sl19.df[['sl19_bjorkid','sl19_rignotid']].dropna(), how='left', left_on='bkm15_id', right_on='sl19_bjorkid')
+
+#    print('AA2 ', len(select.df))
+    # Add in sl19_rignotid from overrides
+    select.df = pd.merge(select.df, over[['w21_key', 'sl19_rignotid']].dropna(), how='left', on='w21_key', suffixes=(None,'_r'))
+    col = select.df['sl19_rignotid']    # this col has precedence
+    select.df['sl19_rignotid'] = col.combine_first(select.df['sl19_rignotid_r'])
+    select.df = select.df.drop(['sl19_rignotid_r'], axis=1)    
+
+#    select = pdutil.merge_nodups(select, over[['w21_key', 'sl19_rignotid']], on='w21_key')
+#    print('AA3 ', len(select.df))
+
+
+    _df = sl19.df[['sl19_rignotid', 'sl19_lon', 'sl19_lat', 'sl19_loc',
+        'sl19_termpos_L', 'sl19_termpos_t',
+
+        # Subglacial discharge Q from RACMO (p. 2492)
+        'sl19_RACMO_t', 'sl19_RACMO_Q', 'sl19_RACMO_tJJA', 'sl19_RACMO_QJJA', 'sl19_RACMO_Qbaseline',
+
+
+        'sl19_EN4_TF',
+        'sl19_EN4_t', 'sl19_EN4_TFbaseline', 'sl19_sector', 'sl19_melt_t',
+        'sl19_melt_m', 'sl19_melt_meltbaseline', 'sl19_iceflux_enderlin',
+        'sl19_iceflux_king', 'sl19_iceflux_final', 'sl19_key']]
+
+    select.df = pdutil.merge_nodups(select.df, _df, how='left', on='sl19_rignotid')
+#    print('AA4 ', len(select.df))
 
     return select
 
@@ -235,15 +281,10 @@ def retreat_history(select):
 def compute_sigma(velocity_file, bm_file, ofname, tdir):
 
 
-***** We want to:
-
-1. Do not worry about cutting off at the terminus.  We want to compute sigma for ALL avialable areas with ice and velocity measurements.
-2. THEN we compute sigma, integrated over the terminus.
-
-
-
-
-
+#***** We want to:
+#
+#1. Do not worry about cutting off at the terminus.  We want to compute sigma for ALL avialable areas with ice and velocity measurements.
+#2. THEN we compute sigma, integrated over the terminus.
 
 
     """Computes sigma for ItsLIVE files

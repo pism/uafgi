@@ -12,6 +12,7 @@ import shapely.geometry
 from uafgi import gdalutil,osrutil,pdutil
 
 shapely2ogr = {
+    'Point' : ogr.wkbPoint,
     'Polygon' : ogr.wkbPolygon,
     'MultiPolygon' : ogr.wkbMultiPolygon,
 }

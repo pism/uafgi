@@ -16,7 +16,7 @@ def _csv_to_tuple(val):
         return parts[0]
     return tuple(parts)
 
-def _read_overrides(overrides_ods, locations_shp, keycols, join_col, map_wkt):
+def _read_overrides(overrides_ods, bkm15_match_ods, sl19_match_ods, locations_shp, keycols, join_col, map_wkt):
 
     """Reads an per-project overrides table, ready to use as overrides in
     joins.  The table is read as a combination of an ODS file and a
@@ -51,6 +51,27 @@ def _read_overrides(overrides_ods, locations_shp, keycols, join_col, map_wkt):
     over = over.drop('comment', axis=1)
     over = over.dropna(how='all')    # Remove blank lines
 
+    # Matching bkm15 to w21
+    bm = pandas_ods_reader.read_ods(bkm15_match_ods,1)
+    bm = bm.drop(['distance', 'bkm15_names'], axis=1)
+    bm = bm.dropna(how='all')    # Remove blank lines
+    over = pd.merge(over, bm, how='outer', on='w21_key', suffixes=(None, '_r'))
+    over['bkm15_key'] = over['bkm15_key_r'].combine_first(over['bkm15_key'])
+    over = over.drop(['bkm15_key_r'], axis=1)
+
+    # Matching sl19 to w21 --- to get rignotid
+    bm = pandas_ods_reader.read_ods(sl19_match_ods,1)
+    #bm = bm.drop(['distance', 'sl19_name'], axis=1)
+    bm = bm[['w21_key','sl19_rignotid']]
+    bm = bm.dropna(how='all')    # Remove blank lines
+#    print(over.columns)
+    over = pd.merge(over, bm, how='outer', on='w21_key', suffixes=(None, '_r'))
+    # over has precedence over sl19
+#    print(over.columns)
+#    print(bm.columns)
+    over['sl19_rignotid'] = over['sl19_rignotid_r'].combine_first(over['sl19_rignotid'])
+    over = over.drop(['sl19_rignotid_r'], axis=1)
+
     # Manual glacier point locations
     tl = pd.DataFrame(shputil.read(locations_shp, wkt=map_wkt))
 
@@ -81,8 +102,10 @@ def _read_overrides(overrides_ods, locations_shp, keycols, join_col, map_wkt):
 
 def read_overrides():
     over = _read_overrides(
-        uafgi.data.join('stability_overrides/overrides.ods'),
-        uafgi.data.join('stability_overrides/terminus_locations.shp'),
+        uafgi.data.join('stability_overrides', 'overrides.ods'),
+        uafgi.data.join('stability_overrides', 'bkm15_match.ods'),
+        uafgi.data.join('stability_overrides', 'sl19_match.ods'),
+        uafgi.data.join('stability_overrides', 'terminus_locations.shp'),
         ['w21_key', 'bkm15_key'], 'w21_key', uafgi.data.wkt.nsidc_ps_north)
     return over
 

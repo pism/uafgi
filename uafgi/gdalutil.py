@@ -83,13 +83,13 @@ class FileInfo(object):
             if 'x' in nc.variables:
                 xx = nc.variables['x'][:].data
                 self.xunits = nc.variables['x'].units
-                self.nx = len(xx)
+#                self.nx = len(xx)
                 self.dx = abs(xx[1]-xx[0])
                 self.x = make_axis(xx)
 
                 yy = nc.variables['y'][:].data
                 self.yunits = nc.variables['y'].units
-                self.ny = len(yy)
+#                self.ny = len(yy)
                 self.dy = abs(yy[1]-yy[0])
                 self.y = make_axis(yy)
 
