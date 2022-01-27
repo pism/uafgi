@@ -109,15 +109,16 @@ def read_overrides():
         ['w21_key', 'bkm15_key'], 'w21_key', uafgi.data.wkt.nsidc_ps_north)
     return over
 
-def read_select(map_wkt):
+def read_select(map_wkt, future=False):
 
     # Read our master list of glaciers
     select = pdutil.ExtDf.read_pickle(uafgi.data.join_outputs('stability/01_select.dfx'))
 
     # Add future termini to our dataset
-    ft = uafgi.data.future_termini.read(map_wkt)
-    ftt = pdutil.group_and_tuplelist(ft.df, ['fj_fid'],
-        [ ('ft_termini', ['ft_terminus']) ])
-    select.df = pdutil.merge_nodups(select.df, ftt, on='fj_fid', how='left')
+    if future:
+        ft = uafgi.data.future_termini.read(map_wkt)
+        ftt = pdutil.group_and_tuplelist(ft.df, ['fj_fid'],
+            [ ('ft_termini', ['ft_terminus']) ])
+        select.df = pdutil.merge_nodups(select.df, ftt, on='fj_fid', how='left')
 
     return select
