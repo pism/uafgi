@@ -1,7 +1,7 @@
 import pandas as pd
 import uafgi.data
 import os,re
-
+import functools
 
 def read():
     """Reads a single dataframe for all the velocity/terminus combos"""

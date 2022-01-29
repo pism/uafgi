@@ -233,6 +233,10 @@ class TmpDir(object):
             self.remove = remove
         self.clear = clear
 
+    @property
+    def location(self):
+        return self.tempd
+
     def _handler(self, sig, frame):
         """Called when user does Ctrl-C (SIGINT)"""
         self._remove()
@@ -247,7 +251,7 @@ class TmpDir(object):
         else:
             self.tempd = tempfile.mkdtemp(dir=self.dir)
             if not self.remove:
-                print('Creating temporary directory {}'.format(tempd))
+                print('Creating temporary directory {}'.format(self.tempd))
 
             # https://stackoverflow.com/questions/22916783/reset-python-sigint-to-default-signal-handler
             self.original_sigint_handler = signal.getsignal(signal.SIGINT)
@@ -265,7 +269,7 @@ class TmpDir(object):
     # -------------------- Uses for tdir
     def subdir(self, **kwargs):
         """Create a temporary subdirectory."""
-        return TmpDir(dir=self.tdir, **kwargs)
+        return TmpDir(dir=self.tempd, **kwargs)
 
     def join(self, *args):
         """Produces a file with a specific name inside the tdir"""

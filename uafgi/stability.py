@@ -22,9 +22,10 @@ from uafgi.data import d_sl19
 import uafgi.data.wkt
 from uafgi.data import greenland,stability
 import pickle
-from uafgi import bedmachine,glacier
-
-
+from uafgi import bedmachine,glacier,cartopyutil,cptutil,dtutil
+import collections
+import scipy.stats
+import netCDF4
 
 def select_glaciers():
     """Step 1: Determine a set of glaciers for our experiment.
@@ -357,3 +358,236 @@ def compute_sigma(velocity_file, bm_file, ofname, tdir):
                 ncout.variables['sigma'][itime,:] = glacier.von_mises_stress_eig(*eig)
 
                 ncout.variables['mask'][itime,:] = ncin.variables['mask'][0,:]
+
+
+# --------------------------------------------------------------------------
+# Helper functions for FitSlaterResidual.compute()
+
+def _binme(t,X,bins):
+    return scipy.stats.binned_statistic(t,X, statistic='mean', bins=bins).statistic
+
+def _bin_multi(bins, t_datas, detrend=False):
+    """t_datas: [(X_t, X_data), (Y_t, Y_data), ...]
+    """
+    bbins = .5*(bins[:-1]+ bins[1:])
+    mask_in = np.ones(len(bbins), dtype=bool)
+    X_bs = list()
+    for X_t, X_data in t_datas:
+        X_b = _binme(X_t, X_data, bins)
+        X_bs.append(X_b)
+        mask_in = mask_in & ~np.isnan(X_b)
+
+    X_bs = [X_b[mask_in] for X_b in X_bs]
+    bbins = bbins[mask_in]
+    if detrend:
+        X_bs = [scipy.signal.detrend(X_b) for X_b in X_bs]
+
+    return X_bs,bbins
+
+
+def get_glacier_df(w21t_glacier_number, w21_mean_fjord_width, velterm_df):
+    """Gets the portion of velterm_df for one glacier.
+    velterm_df:
+        Result of d_velterm.read()"""
+
+    #### Wood et al + CALFIN dataset
+    df = velterm_df[velterm_df.glacier_id == w21t_glacier_number]
+
+    # ---------------------------------------------------
+    # Get rid of future termini
+    df = df[df.term_year < 2020]
+
+    # Useonly termini since 2000
+    df = df[(df['term_year'] > 2000) & (df.term_year < 2020)]
+
+    # Use only velocities older than the terminus
+    df = df[df.vel_year < df.term_year]
+
+    # Convert up_area to up_len_km
+    df['up_len_km'] = df['up_area'] / (w21_mean_fjord_width * 1e6)
+
+    return df
+
+def slater_termpos_regression(selrow, glacier_df, year_range):
+
+    bins = np.arange(*year_range, 1)    # binsize = 1 year
+
+    # Extract dataframe showing just year vs. terminus location
+    yearlen = glacier_df.sort_values(['term_year'])[['term_year', 'up_len_km']].drop_duplicates()
+
+    # Bin by 1-year intervals
+    (termpos_b1,up_len_km_b1),bbins1 = _bin_multi(bins, [
+        (selrow.sl19_termpos_t, selrow.sl19_termpos_L),
+        (yearlen.term_year, yearlen.up_len_km)])
+
+    # Get correspondence between Slater and our terminus positions
+    # Allows prediction of termpos from up_len_km.
+    # The regression is done based on 1-year bins (i.e. no binning)
+    termpos_lr = scipy.stats.linregress(up_len_km_b1,termpos_b1)
+
+    return up_len_km_b1,termpos_b1,bbins1,termpos_lr
+
+
+# ---------------------------------------------------
+FitSlaterResidualsRet = collections.namedtuple('FitSlaterResidualsRet', (
+    # 1-year binned data
+    "bbins1", 'termpos_b1', 'up_len_km_b1',
+
+    "bbins1l", 'melt_b1l', 'termpos_b1l',
+
+    # 5-year binned data
+    'bbins', 'melt_b', 'termpos_b',
+
+    # Linear regressions
+    'termpos_lr',     # Conversion from up_len_km to Slater's termpos
+    'slater_lr',        # melt vs. termpos for this glacier, as per Slater et al 2019
+    'resid_lr',        # Our sigma ("fluxratio") vs. residual of Slater's prediction
+
+    # Data points per terminal/velocity pair
+     'glacier_df',
+
+    #...and grouped by year
+    'resid_df'))
+
+def fit_slater_residuals(selrow, velterm_df):
+    """Computes fit between the sigma values from velterm, and residuals
+    of Slater's predictions vs. reality.
+
+    selrow:
+        A row from dataframe returned by `select_glacers()`
+        (above); usually stored on disk and retrieved.
+    velterm_df:
+        Result of d_velterm.read()
+    Returns: FitSlaterResidualRet
+    """
+
+    year_range = (1960,2021)
+    bins = np.arange(*year_range,5)    # binsize=5
+
+    glacier_df = get_glacier_df(selrow.w21t_glacier_number, selrow.w21_mean_fjord_width, velterm_df)
+
+    # Reproduce plots in Slater et al 2019 supplement
+
+    # ----------- Bin by 5-year intervals
+    (melt_b,termpos_b),bbins = _bin_multi(bins, [
+        (selrow.sl19_melt_t, selrow.sl19_melt_m),
+        (selrow.sl19_termpos_t, selrow.sl19_termpos_L)])
+
+    # -------- Get conversion from our up_len_km to Slater's termpos
+    bins1 = np.arange(*year_range, 1)    # binsize = 1 year
+
+    # Extract dataframe showing just year vs. terminus location
+    yearlen = glacier_df.sort_values(['term_year'])[['term_year', 'up_len_km']].drop_duplicates()
+
+    # Get correspondence between Slater and our terminus positions
+    # Allows prediction of termpos from up_len_km.
+    # The regression is done based on 1-year bins (i.e. no binning)
+    # Bin by 1-year intervals
+    (termpos_b1,up_len_km_b1),bbins1 = _bin_multi(bins1, [
+        (selrow.sl19_termpos_t, selrow.sl19_termpos_L),
+        (yearlen.term_year, yearlen.up_len_km)])
+    termpos_lr = scipy.stats.linregress(up_len_km_b1,termpos_b1)
+
+
+    # Bin 1-year for plotting
+    (melt_b1l,termpos_b1l),bbins1l = _bin_multi(bins1, [
+        (selrow.sl19_melt_t, selrow.sl19_melt_m),
+        (selrow.sl19_termpos_t, selrow.sl19_termpos_L)])
+
+    # ----------------
+
+    # Determine Slater's melt value at each of our data's time points
+    melt_sp = scipy.interpolate.UnivariateSpline(bbins,melt_b)
+    glacier_df['sl19_melt'] = glacier_df['term_year'].map(melt_sp)
+
+    # Predicted termpos based on Slater's relationship with melt
+    slater_lr = scipy.stats.linregress(melt_b,termpos_b)
+    glacier_df['sl19_pred_termpos'] = glacier_df['sl19_melt'] * slater_lr.slope + slater_lr.intercept
+
+    # Conversion of our up_len_km to Slater units (to use in melt vs. terminal position relation)
+    glacier_df['our_termpos'] = glacier_df['up_len_km'].map(lambda x: termpos_lr.slope*x + termpos_lr.intercept)
+
+    # Difference between our termpos and the predicted termpos
+    # This is the residual between Slater's prediction vs. what actually happened
+    glacier_df['termpos_residual'] = glacier_df['our_termpos'] - glacier_df['sl19_pred_termpos']
+
+
+    # -----------------------------------------------
+    # See if there's a correlation between residuals on terminal position,
+    # and our computed sigma (based on fjord geometry)
+    resid_df = glacier_df[['term_year', 'fluxratio', 'termpos_residual']].dropna().groupby('term_year').mean()
+    resid_lr = scipy.stats.linregress(resid_df.fluxratio, resid_df.termpos_residual)
+    #print(resid_lr)
+
+    # -----------------------------------------------
+    # Store outputs
+    return FitSlaterResidualsRet(
+        bbins1, termpos_b1, up_len_km_b1,
+        bbins1l, melt_b1l, termpos_b1l,
+        bbins, melt_b, termpos_b,
+        termpos_lr, slater_lr, resid_lr,
+        glacier_df, resid_df)
+
+# ----------------------------------------------------------------
+def plot_reference_map(fig, selrow):
+    """Plots a reference map of a single glacier
+
+    fig:
+        Pre-created figure (of a certain size/shape) to populate.
+    selrow:
+        Row of d_stability.read()"""
+
+    # fig = matplotlib.pyplot.figure()
+
+    # -----------------------------------------------------------
+    # (1,0): Map
+    # Get local geometry
+    bedmachine_file = uafgi.data.join_outputs('bedmachine', 'BedMachineGreenland-2017-09-20_{}.nc'.format(selrow.ns481_grid))
+    with netCDF4.Dataset(bedmachine_file) as nc:
+        nc.set_auto_mask(False)
+        mapinfo = cartopyutil.nc_mapinfo(nc, 'polar_stereographic')
+        bed = nc.variables['bed'][:]
+        xx = nc.variables['x'][:]
+        yy = nc.variables['y'][:]
+
+    # Set up the basemap
+    ax = fig.add_axes((.1,.1,.9,.9), projection=mapinfo.crs)
+    #ax = fig.add_subplot(spec[2,:], projection=mapinfo.crs)
+    ax.set_extent(mapinfo.extents, crs=mapinfo.crs)
+    ax.coastlines(resolution='50m')
+
+
+    # Plot depth in the fjord
+    fjord_gd = bedmachine.get_fjord_gd(bedmachine_file, selrow.fj_poly)
+    fjord = np.flip(fjord_gd, axis=0)
+    bedm = np.ma.masked_where(np.logical_not(fjord), bed)
+
+    bui_range = (0.,350.)
+    cmap,_,_ = cptutil.read_cpt('caribbean.cpt')
+    pcm = ax.pcolormesh(
+        xx, yy, bedm, transform=mapinfo.crs,
+        cmap=cmap, vmin=-1000, vmax=0)
+    cbar = fig.colorbar(pcm, ax=ax)
+    cbar.set_label('Fjord Bathymetry (m)')
+        
+    # Plot the termini
+    date_termini = sorted(selrow.w21t_date_termini)
+
+    yy = [dtutil.year_fraction(dt) for dt,_ in date_termini]
+    year_termini = [(y,t) for y,(_,t) in zip(yy, date_termini) if y > 2000]
+
+    for year,term in year_termini:
+        ax.add_geometries([term], crs=mapinfo.crs, edgecolor='red', facecolor='none', alpha=.8)
+
+    bounds = date_termini[0][1].bounds
+    for _,term in date_termini:
+        bounds = (
+            min(bounds[0],term.bounds[0]),
+            min(bounds[1],term.bounds[1]),
+            max(bounds[2],term.bounds[2]),
+            max(bounds[3],term.bounds[3]))
+    x0,y0,x1,y1 = bounds
+    ax.set_extent(extents=(x0-5000,x1+5000,y0-5000,y1+5000), crs=mapinfo.crs)
+
+    # Plot scale in km
+    cartopyutil.add_osgb_scalebar(ax)
