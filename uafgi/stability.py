@@ -515,7 +515,7 @@ def fit_slater_residuals(selrow, velterm_df):
     # -----------------------------------------------
     # See if there's a correlation between residuals on terminal position,
     # and our computed sigma (based on fjord geometry)
-    resid_df = glacier_df[['term_year', 'fluxratio', 'termpos_residual']].dropna().groupby('term_year').mean()
+    resid_df = glacier_df[['term_year', 'fluxratio', 'termpos_residual']].dropna().groupby('term_year').mean().reset_index()
     resid_lr = scipy.stats.linregress(resid_df.fluxratio, resid_df.termpos_residual)
     #print(resid_lr)
 
