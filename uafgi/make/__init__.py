@@ -1,4 +1,4 @@
-import os,dill,stat
+import os,stat
 import itertools
 from uafgi import ioutil,gicollections
 import subprocess
@@ -94,6 +94,7 @@ class Makefile(object):
             Directory in which to generate the file.
             Produces odir/Makefile, plus a bunch of other stuff
         """
+        import dill
 
         os.makedirs(odir, exist_ok=True)
 
