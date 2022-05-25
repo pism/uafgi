@@ -325,7 +325,7 @@ def scale_bar(ax, location, length, metres_per_unit=1000, unit_name='km',
 
 
 
-def add_osgb_scalebar(ax, at_x=(0.1, 0.4), at_y=(0.05, 0.075), max_stripes=5):
+def add_osgb_scalebar(ax, at_x=(0.1, 0.4), at_y=(0.05, 0.075), max_stripes=5, text_color='black'):
     """
     Add a scalebar to a GeoAxes of type cartopy.crs.OSGB (only).
     NOTE: Coordinates in ax must be in METERS
@@ -379,15 +379,18 @@ def add_osgb_scalebar(ax, at_x=(0.1, 0.4), at_y=(0.05, 0.075), max_stripes=5):
         0.5 * (xl0 + xl1),
         yl1 + y_margin,
         'Km',
+        color=text_color,
         verticalalignment='bottom',
         horizontalalignment='center',
         fontproperties=font_props)
 
     # add numeric labels
-    for x in x_vals:
+#    for x in x_vals:
+    for x in (x_vals[0], x_vals[-1]):
         plt.text(x,
                  yl0 - 2 * y_margin,
-                 '{:g}'.format((x - xl0) * 0.001),
+                 '{:g}'.format((x - xl0) * 0.001),    # *.001 = km
+                 color=text_color,
                  verticalalignment='top',
                  horizontalalignment='center',
                  fontproperties=font_props)
