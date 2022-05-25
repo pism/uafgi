@@ -22,10 +22,12 @@ from uafgi.data import d_sl19
 import uafgi.data.wkt
 from uafgi.data import greenland,stability
 import pickle
-from uafgi import bedmachine,glacier,cartopyutil,cptutil,dtutil
+from uafgi import bedmachine,glacier,cartopyutil,cptutil,dtutil,pltutil
 import collections
 import scipy.stats
 import netCDF4
+import matplotlib.pyplot
+import matplotlib.cm
 
 def select_glaciers():
     """Step 1: Determine a set of glaciers for our experiment.
@@ -385,6 +387,12 @@ def _bin_multi(bins, t_datas, detrend=False):
     return X_bs,bbins
 
 
+# Outliers to exclude
+_inliers = {
+    185: lambda row: (row['up_len_km'] < 22.) or (row['up_len_km'] > 24.),
+    65: lambda row: (row['up_len_km'] < 0.) or (row['up_len_km'] > 1.),
+}
+
 def get_glacier_df(w21t_glacier_number, w21_mean_fjord_width, velterm_df):
     """Gets the portion of velterm_df for one glacier.
     velterm_df:
@@ -405,6 +413,10 @@ def get_glacier_df(w21t_glacier_number, w21_mean_fjord_width, velterm_df):
 
     # Convert up_area to up_len_km
     df['up_len_km'] = df['up_area'] / (w21_mean_fjord_width * 1e6)
+
+    # Remove outliers
+    if w21t_glacier_number in _inliers:
+        df = df[df.apply(_inliers[w21t_glacier_number], axis=1)]
 
     return df
 
@@ -515,7 +527,7 @@ def fit_slater_residuals(selrow, velterm_df):
     # -----------------------------------------------
     # See if there's a correlation between residuals on terminal position,
     # and our computed sigma (based on fjord geometry)
-    resid_df = glacier_df[['term_year', 'fluxratio', 'termpos_residual']].dropna().groupby('term_year').mean().reset_index()
+    resid_df = glacier_df[['term_year', 'fluxratio', 'our_termpos', 'sl19_pred_termpos', 'termpos_residual']].dropna().groupby('term_year').mean().reset_index()
     resid_lr = scipy.stats.linregress(resid_df.fluxratio, resid_df.termpos_residual)
     #print(resid_lr)
 
@@ -529,6 +541,49 @@ def fit_slater_residuals(selrow, velterm_df):
         glacier_df, resid_df)
 
 # ----------------------------------------------------------------
+def write_plot(fig, ofname):
+    # Write plot and shrink
+    with ioutil.TmpDir() as tdir:
+        fname0 = tdir.filename() + '.png'
+        fig.savefig(fname0, dpi=300, transparent=True)
+        with ioutil.WriteIfDifferent(ofname) as wid:
+            cmd = ['convert', fname0, '-trim', '-strip', wid.tmpfile]
+            subprocess.run(cmd, check=True)
+
+ELEV_RANGE = (-1000, 0)
+
+
+#def plot_reference_cbar(fig):
+##    # Get local geometry
+##    bedmachine_file = uafgi.data.join_outputs('bedmachine', 'BedMachineGreenland-2017-09-20_{}.nc'.format(#selrow.ns481_grid))
+##    with netCDF4.Dataset(bedmachine_file) as nc:
+##        nc.set_auto_mask(False)
+##        mapinfo = cartopyutil.nc_mapinfo(nc, 'polar_stereographic')
+#
+#    cmap,_,_ = cptutil.read_cpt('Blues_09a.cpt')
+#    pltutil.plot_cbar(
+#        fig, cmap,
+#        ELEV_RANGE[0], ELEV_RANGE[1], 'horizontal')
+
+
+def plot_reference_cbar(fig):
+    """cax:
+        Axes to use
+    """
+    cmap,_,_ = cptutil.read_cpt('Blues_09a.cpt')
+    norm = matplotlib.colors.Normalize(vmin=ELEV_RANGE[0], vmax=ELEV_RANGE[1], clip=True)
+    ax = fig.add_axes((.1,.6,.8,.35))
+
+    # Plot colorbar
+    cb1 = matplotlib.colorbar.ColorbarBase(
+        ax, cmap=cmap, norm=norm,
+        orientation='horizontal')
+    cb1.locator = matplotlib.ticker.FixedLocator([-1000, -800, -600, -400, -200, 0])
+    cb1.update_ticks()
+
+    return cb1
+
+
 def plot_reference_map(fig, selrow):
     """Plots a reference map of a single glacier
 
@@ -551,10 +606,13 @@ def plot_reference_map(fig, selrow):
         yy = nc.variables['y'][:]
 
     # Set up the basemap
-    ax = fig.add_axes((.1,.1,.9,.9), projection=mapinfo.crs)
+    ax = fig.add_axes((.1,.1,.9,.86), projection=mapinfo.crs)
+    #ax.set_facecolor('xkcd:light grey')    # https://xkcd.com/color/rgb/
+    ax.set_facecolor('#E0E0E0')    # Map background https://xkcd.com/color/rgb/
+
     #ax = fig.add_subplot(spec[2,:], projection=mapinfo.crs)
     ax.set_extent(mapinfo.extents, crs=mapinfo.crs)
-    ax.coastlines(resolution='50m')
+#    ax.coastlines(resolution='50m')
 
 
     # Plot depth in the fjord
@@ -563,13 +621,15 @@ def plot_reference_map(fig, selrow):
     bedm = np.ma.masked_where(np.logical_not(fjord), bed)
 
     bui_range = (0.,350.)
-    cmap,_,_ = cptutil.read_cpt('caribbean.cpt')
+    cmap,_,_ = cptutil.read_cpt('Blues_09a.cpt')
+
     pcm = ax.pcolormesh(
         xx, yy, bedm, transform=mapinfo.crs,
-        cmap=cmap, vmin=-1000, vmax=0)
-    cbar = fig.colorbar(pcm, ax=ax)
-    cbar.set_label('Fjord Bathymetry (m)')
-        
+        cmap=cmap, vmin=ELEV_RANGE[0], vmax=ELEV_RANGE[1])
+#    cbar = fig.colorbar(pcm, ax=ax)
+#    cbar.set_label('Fjord Bathymetry (m)')
+##    plot_reference_cbar(pcm, 'refmap_cbar.png')
+
     # Plot the termini
     date_termini = sorted(selrow.w21t_date_termini)
 
@@ -590,4 +650,19 @@ def plot_reference_map(fig, selrow):
     ax.set_extent(extents=(x0-5000,x1+5000,y0-5000,y1+5000), crs=mapinfo.crs)
 
     # Plot scale in km
-    cartopyutil.add_osgb_scalebar(ax)
+    cartopyutil.add_osgb_scalebar(ax)#, at_y=(0.10, 0.080))
+
+    # Add an arrow showing ice flow
+    dir = selrow.ns481_grid[0]
+    if dir == 'E':
+        coords = (.5,.05,.45,0)
+    else:    # 'W'
+        coords = (.95,.05,-.45,0)
+    arrow = ax.arrow(
+        *coords, transform=ax.transAxes,
+        head_width=.03, ec='black', length_includes_head=True,
+        shape='full', overhang=1,
+        label='Direction of Ice Flow')
+    ax.annotate('Ice Flow', xy=(.725, .07), xycoords='axes fraction', size=10, ha='center')
+
+

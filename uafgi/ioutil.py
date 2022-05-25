@@ -96,33 +96,25 @@ class AtomicOverwrite(object):
 class WriteIfDifferent(object):
     """Writes a file, swapping it to overwrite the previous file atomically"""
     def __init__(self, name, mode='w'):
-        self.name = name    # Filename
-        self.tmp = self.name + '.tmp'
-        self.mode = mode
-        self.out = None
+        self.name = name    # Final Filename
+        self.tmpfile = self.name + '.tmp'
 
     def __enter__(self):
-        self.out = open(self.tmp, self.mode)
         return self
 
     def rollback(self):
-        os.remove(self.tmp)
+        os.remove(self.tmpfile)
 
     def __exit__(self, *args):
-        # Close the file
-        if self.out is not None:
-            self.out.close()
-            self.out = None
-
         # Compare to
         if (not os.path.exists(self.name)):
             # Writing a virgin file
-            os.rename(self.tmp, self.name)
+            os.rename(self.tmpfile, self.name)
         else:
             # Compare contents to what's there
             with open(self.name, 'rb') as old_file:
                 old_contents = old_file.read()
-            with open(self.tmp, 'rb') as new_file:
+            with open(self.tmpfile, 'rb') as new_file:
                 new_contents = new_file.read()
 
             if old_contents == new_contents:
@@ -130,7 +122,7 @@ class WriteIfDifferent(object):
             else:
                 print('Writing {}'.format(self.name))
                 os.remove(self.name)
-                os.rename(self.tmp, self.name)
+                os.rename(self.tmpfile, self.name)
 
     def close(self):
         self.__exit__()
