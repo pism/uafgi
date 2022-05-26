@@ -4,7 +4,6 @@ import numpy as np
 import shapely.geometry
 import cartopy.crs
 import cartopy.geodesic
-
 import matplotlib.pyplot as plt
 import matplotlib.font_manager
 
