@@ -29,6 +29,23 @@ import netCDF4
 import matplotlib.pyplot
 import matplotlib.cm
 
+def transformer_wkt_to_wgs84(wkt1):
+    """Creates a transformer from map projection to lon/lat.
+    wkt1: WKT string
+        The map projection being used (our favorite stereographic in this case)
+    """
+    # Get map projection
+    crs0 = pyproj.CRS.from_string(wkt1)
+
+    # Get WGS84
+    crs1 = pyproj.CRS.from_string("epsg:4326")
+
+    # Converts from crs0 to crs1
+    # See for always_xy: https://proj.org/faq.html#why-is-the-axis-ordering-in-proj-not-consistent
+    return pyproj.Transformer.from_crs(crs0, crs1, always_xy=True)
+
+
+
 def select_glaciers():
     """Step 1: Determine a set of glaciers for our experiment.
 
@@ -63,7 +80,7 @@ def select_glaciers():
     """
 
     map_wkt = uafgi.data.wkt.nsidc_ps_north
-
+    to_wgs84 = transformer_wkt_to_wgs84(map_wkt)
     pd.set_option('display.max_columns', None)
 
     # Read user overrides of joins and columns
@@ -98,6 +115,9 @@ def select_glaciers():
             lambda date_terminus_list: shapelyutil.pointify(shape for _,shape in date_terminus_list))
     # Get the centroid of the multipoint; now it's some sort of point within the temrinus region
     w21tx.df['w21t_tloc'] = w21tx.df['w21t_points'].map(lambda mpt: mpt.centroid)
+    col_lonlat = w21tx.df.w21t_tloc.map(lambda pt: to_wgs84.transform(pt.x, pt.y))
+    w21tx.df['w21t_lon'] = col_lonlat.map(lambda pt: pt[0])
+    w21tx.df['w21t_lat'] = col_lonlat.map(lambda pt: pt[1])
 
     # Join back with w21
     w21 = d_w21.read(map_wkt)

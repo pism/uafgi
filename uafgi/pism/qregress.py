@@ -26,7 +26,7 @@ def fit_sigma_maxs(select, velterm_df):
 
 #    rows = list()
     dfs = list()
-    for _,selrow in select.df.iterrows():
+    for _,selrow in select.iterrows():
         adv = vtdf[vtdf.glacier_id == selrow.w21t_glacier_number]
         
         df = d_w21.glacier_rate_df(selrow.w21_data_fname)
@@ -52,7 +52,7 @@ def _selcols(select, y0, y1):
     Qsg_name = f'w21_subglacial_discharge_{y0:04d}_{y_end:04d}'
     TF_name = f'w21_mean_TF_{y0:04d}-{y_end:04d}'
         
-    df0 = select.df[[
+    df0 = select[[
         'w21t_Glacier', 'w21t_glacier_number', 'w21_coast', 'w21_mean_fjord_width',
         Qsg_name, TF_name]]
     df0 = df0.rename(columns={Qsg_name:'Qsg', TF_name:'TF'})
@@ -118,7 +118,7 @@ def read_retreats(select):
 
     year_bounds = [1992,]
 
-    for _,selrow in select.df.iterrows():
+    for _,selrow in select.iterrows():
         with netCDF4.Dataset(os.path.join('data', 'wood2021', 'data', selrow['w21_data_fname'])) as nc:
             grp = nc.groups['ice_front_retreat']['discrete']
             retreat_time = grp.variables['retreat_time'][:].astype(np.float64)
@@ -186,7 +186,7 @@ def timeseries_df(select):
     )
 
     rows = list()
-    for _,selrow in select.df.iterrows():
+    for _,selrow in select.iterrows():
         row = {'w21t_glacier_number': selrow.w21t_glacier_number}
         with netCDF4.Dataset(os.path.join('data', 'wood2021', 'data', selrow['w21_data_fname'])) as nc:
             for ovname, sgroups, vname_time, vname_val in specs:

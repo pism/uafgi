@@ -124,7 +124,7 @@ def load_grids():
     srs:
         
     """
-    griddir = uafgi.data.join('measures', 'grids')
+    griddir = uafgi.data.join('measures-nsidc0481', 'grids')
     gridRE = re.compile(r'([WE]\d\d\.\d\d[NS])_grid\.nc')
 
     grid_s = list()

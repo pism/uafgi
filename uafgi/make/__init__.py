@@ -86,7 +86,7 @@ class Makefile(object):
 
         return '\n'.join(out)
 
-    def generate(self, targets, odir, tdir_fn=ioutil.TmpDir, flags={}):
+    def generate(self, targets, odir, tdir_fn=ioutil.TmpDir, flags={}, python_exe=None):
         """Renders the Makefile object as a standard Unix Makefile, along with
         the thunks needed to run it.
 
@@ -109,12 +109,12 @@ class Makefile(object):
         if sys.platform == 'darwin':
             # Wrapper needed for Darwin to keep DYLD_LIBRARY_PATH correct.
             # See in sh/ folder in the Spack harness.
-            pythone = 'pythone'
-            pythone_slurm = 'srun pythone'
+            pythone = 'pythone' if python_exe is None else python_exe
+            pythone_slurm = f'srun {pythone}'
         else:
             # Just run Python straight
-            pythone = 'python'
-            pythone_slurm = 'srun --ntasks=1 python'
+            pythone = 'python' if python_exe is None else python_exe
+            pythone_slurm = f'srun --ntasks=1 {pythone}'
 
         with open(slurmake, 'w') as out:
             # SLURM version
