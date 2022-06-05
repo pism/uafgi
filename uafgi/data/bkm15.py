@@ -9,7 +9,7 @@ def read(map_wkt):
     # RGI_ID = Randolph Glacier Inventory: not on GrIS
     # GLIMS_ID = Global Land Ice Measurements from Space: not on GrIS
 
-    df = pd.read_csv(uafgi.data.join('GreenlandGlacierNames/tc-9-2215-2015-supplement.csv'))
+    df = pd.read_csv(uafgi.data.join('bkm15/tc-9-2215-2015-supplement.csv'))
 
     # Keep only glaciers on the ice sheet (285 of them)
 #    df = df[df['Type'] == 'GrIS']

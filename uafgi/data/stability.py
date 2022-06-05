@@ -1,8 +1,13 @@
+import os
+import pyproj
 import pandas as pd
 import uafgi.data
 from uafgi import shputil,pdutil
 import uafgi.data.future_termini
 import uafgi.data.fj
+import uafgi.data.wkt
+import uafgi.data.w21 as d_w21
+from uafgi.data import d_sl19
 
 def _csv_to_tuple(val):
     """Converts key column value from comma-separated format to standard
@@ -110,6 +115,7 @@ def read_overrides():
     return over
 
 def read_select(map_wkt, future=False):
+    """Returns an ExtDf"""
 
     # Read our master list of glaciers
     select = pdutil.ExtDf.read_pickle(uafgi.data.join_outputs('stability/01_select.dfx'))
@@ -122,3 +128,56 @@ def read_select(map_wkt, future=False):
         select.df = pdutil.merge_nodups(select.df, ftt, on='fj_fid', how='left')
 
     return select
+
+def read_extract_raw():
+    # Read the publication file if the original extract file is not available.
+    ifname = uafgi.data.join_outputs('stability', '01_select_extract.csv')
+    if os.path.exists(ifname):
+        orig = True
+    else:
+        orig = False
+        ifname = uafgi.data.join_outputs('stability', 'greenland_calving.csv')
+
+    df = pd.read_csv(ifname)
+    df.w21_key = df.w21_key.map(eval)
+
+    # Remove columns that were added in the published CSV file
+    if not orig:
+        df = df.drop(['tp_slope', 'tp_intercept', 'tp_rvalue', 'tp_pvalue', 'tp_stderr', 'sl_slope', 'sl_intercept', 'sl_rvalue', 'sl_pvalue', 'sl_stderr', 'rs_slope', 'rs_intercept', 'rs_rvalue', 'rs_pvalue', 'rs_stderr'], axis=1)
+
+
+
+    return df
+
+def read_extract(map_wkt, joins=set()):
+    """Reads the published master CSV file; and then adds back source data from various datasets."""
+
+    df = read_extract_raw()
+
+    map_wkt = uafgi.data.wkt.nsidc_ps_north
+    wgs84 = pyproj.CRS.from_epsg("4326")
+    map_crs = pyproj.CRS.from_string(map_wkt)
+    transform_wgs84 = pyproj.Transformer.from_crs(wgs84,map_crs,always_xy=True)
+
+    df['up_loc'] = pdutil.points_col(df.up_lon, df.up_lat, transform_wgs84)
+
+    if 'fj' in joins:
+        # Add fjord polygons
+        fj = uafgi.data.fj.read(uafgi.data.wkt.nsidc_ps_north)
+        df = pd.merge(df, fj.df[['fj_fid', 'fj_poly']], how='left', on='fj_fid')
+
+    if 'w21t' in joins:
+        # Add w21t_date_termini
+        w21t = d_w21.termini_by_glacier(d_w21.read_termini(map_wkt))
+        df = pd.merge(df, w21t.df[['w21t_glacier_number', 'w21t_date_termini']], how='left', on='w21t_glacier_number')
+
+    if 'w21' in joins:
+        w21 = d_w21.read(map_wkt)
+        df = pd.merge(df, w21.df, how='left', on='w21_key')
+
+    if 'sl19' in joins:
+        sl19 = d_sl19.read(map_wkt)
+        df = pd.merge(df, sl19.df, how='left', on='sl19_rignotid')
+
+
+    return df

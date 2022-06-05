@@ -3,7 +3,7 @@ import uafgi.data
 import os,re
 import functools
 
-def read():
+def df_files():
     """Reads a single dataframe for all the velocity/terminus combos"""
     veltermRE = re.compile(r'velterm_(\d\d\d)\.df')
     dir = uafgi.data.join_outputs('velterm')
@@ -21,3 +21,6 @@ def read():
 
     return pd.concat(dfs)
 
+def read():
+    """Reads a single dataframe from the CSV file."""
+    return pd.read_csv(uafgi.data.join_outputs('velterm', 'velterm.csv'))
