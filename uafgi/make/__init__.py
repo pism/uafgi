@@ -1,6 +1,6 @@
 import os,stat
 import itertools
-from uafgi import ioutil,gicollections
+from uafgi.util import ioutil,gicollections
 import subprocess
 import sys
 
