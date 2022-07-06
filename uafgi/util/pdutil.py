@@ -1,6 +1,6 @@
 import pandas as pd
 import uafgi.data
-from uafgi import pathutil,gicollections
+from uafgi.util import pathutil,gicollections
 import pyproj
 import shapely
 import copy

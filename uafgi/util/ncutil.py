@@ -22,7 +22,7 @@ import shutil
 import subprocess
 import contextlib
 import itertools
-from uafgi import gicollections
+from uafgi.util import gicollections
 import cf_units
 
 # Copy a netCDF file (so we can add more stuff to it)

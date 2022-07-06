@@ -1,6 +1,6 @@
 import json
 from gdal import ogr,osr
-from uafgi import cdoutil,ncutil,functional,gdalutil,ogrutil
+from uafgi.util import cdoutil,ncutil,functional,gdalutil,ogrutil
 from osgeo import gdal
 import numpy as np
 

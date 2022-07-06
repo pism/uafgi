@@ -9,7 +9,7 @@ from osgeo import ogr,gdal
 import shapefile
 import shapely.geometry
 
-from uafgi import gdalutil,osrutil,pdutil
+from uafgi.util import gdalutil,osrutil,pdutil
 
 shapely2ogr = {
     'Point' : ogr.wkbPoint,

@@ -1,6 +1,6 @@
 import types
 from uafgi.checksum import hashup
-from uafgi import gicollections,giutil
+from uafgi.util import gicollections,giutil
 import types
 import inspect
 import operator

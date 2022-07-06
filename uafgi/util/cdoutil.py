@@ -1,10 +1,10 @@
 from cdo import Cdo
 import os.path
-from uafgi import ioutil
+from uafgi.util import ioutil
 import netCDF4
 import cf_units
 import subprocess
-from uafgi import functional,cfutil,gdalutil
+from uafgi.util import functional,cfutil,gdalutil
 import datetime
 
 """Utilities for working with the Python CDO interface"""

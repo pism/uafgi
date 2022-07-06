@@ -2,7 +2,7 @@ from osgeo import osr#,ogr,gdal
 import netCDF4
 import re
 import cf_units
-from uafgi import ncutil,giutil
+from uafgi.util import ncutil,giutil
 import datetime
 import numpy as np
 

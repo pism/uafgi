@@ -1,7 +1,7 @@
 import collections
 import numpy as np
 import netCDF4, cf_units
-from uafgi import functional,ogrutil,cfutil,ncutil
+from uafgi.util import functional,ogrutil,cfutil,ncutil
 from osgeo import osr,ogr,gdal
 
 def check_error(err):
