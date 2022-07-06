@@ -1,5 +1,5 @@
 import types
-from uafgi.checksum import hashup
+from uafgi.util.checksum import hashup
 from uafgi.util import gicollections,giutil
 import types
 import inspect
