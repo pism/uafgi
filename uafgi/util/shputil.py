@@ -146,15 +146,26 @@ shapely_converters = {
     shapefile.POINT : _xPOINT,
     }
 
+class IdentityTransformer:
+    def __init__(self):
+        pass
+
+    def transform(self, *args):
+        return args
+
 def get_transformer(fname, wkt1):
     """Creates a transformer from native projetion to wkt1"""
 
-    # Convert WKT to CRS
-    crs1 = pyproj.CRS.from_string(wkt1)
+    if wkt1 is None:
+        return IdentityTransformer()
 
     # Get CRS out of shapefile
     with open(fname[:-4] + '.prj') as fin:
-        crs0 = pyproj.CRS.from_string(next(fin))
+        crs0_wkt = next(fin)
+        crs0 = pyproj.CRS.from_string(crs0_wkt)
+
+    # Convert WKT to CRS
+    crs1 = pyproj.CRS.from_string(wkt1)
 
     # Converts from crs0 to crs1
     # See for always_xy: https://proj.org/faq.html#why-is-the-axis-ordering-in-proj-not-consistent

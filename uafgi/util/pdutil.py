@@ -1,5 +1,4 @@
 import pandas as pd
-import uafgi.data
 from uafgi.util import pathutil,gicollections
 import pyproj
 import shapely
