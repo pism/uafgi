@@ -162,6 +162,9 @@ def file_info(raster_file):
 
     # ----------------------------------------
     # Not NetCDF, just do general GDAL
+    # TODO: See here how to do the same thing with core GDAL Python calls
+    # https://gdal.org/user/raster_data_model.html
+
 
     # Get the raw data
     cmd = ['gdalinfo', '-json', raster_file]
