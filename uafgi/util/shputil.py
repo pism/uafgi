@@ -236,11 +236,12 @@ def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='loc', add_pre
             renames['_shape'] = shape
 
     df = df.drop(drops, axis=1).rename(columns=renames)
-    up = pdutil.ext_df(df, wkt, add_prefix=add_prefix,
-        units={},
-        keycols=['fid'])
+    return df
+#    up = pdutil.ext_df(df, wkt, add_prefix=add_prefix,
+#        units={},
+#        keycols=['fid'])
 
-    return up
+#    return up
 
 # ---------------------------------------------------------
 # Here's an example of reading a shapefile using ogr
@@ -476,16 +477,11 @@ def write_df(df, shape_col, shapely_type, ofname, wkt=None):
     for cname in df1.columns:
         field_defs.append((cname, dtype2ogr[df1[cname].dtype]))
 
-    print('field_defs ',field_defs)
+    # print('field_defs ',field_defs)
     with shputil.ShapefileWriter(ofname, shapely_type, field_defs, wkt=wkt) as writer:
         for (_,shaperow), (_,row) in zip(shape_series.iterrows(), df1.iterrows()):
             shape = shaperow[shape_col]
-            print('shape: ', shape)
-            print(dict(**row))
             writer.write(shape, **row)
-            return
-
-
 
 #def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='loc', add_prefix=None):
 #    """
