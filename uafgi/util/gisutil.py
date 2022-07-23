@@ -109,6 +109,15 @@ class RasterInfo:
         self.x1 = self.x0 + self.nx * self.dx
         self.y1 = self.y0 + self.ny * self.dy
 
+    def flipud(self):
+        """Turns a north-up geometry into north-down (or vice versa)"""
+        GT = self.geotransform
+        return RasterInfo(self.wkt, self.nx, self.ny,
+            np.array([
+                GT[0], GT[1], GT[2],
+                GT[3]+GT[5]*self.ny, GT[4], -GT[5]]))
+
+
     def __str__(self):
         return f"""RasterInfo:
     x: [{self.x0}, {self.x1}] dx={self.dx} nx={self.nx}
@@ -166,38 +175,3 @@ class RasterInfo:
 # ====================================================
 # From PISM
 # https://github.com/pism/pism/blob/main/util/fill_missing_petsc.py
-def fill_missing(field, matrix=None):
-    """Fill missing values in a NumPy array 'field' using the matrix
-    'matrix' approximating the Laplace operator."""
-
-    ksp = create_solver()
-
-    if matrix is None:
-        A = assemble_matrix(field.mask)
-    else:
-        # PETSc.Sys.Print("Reusing the matrix...")
-        A = matrix
-
-    # obtain solution & RHS vectors
-    x, b = A.getVecs()
-
-    assemble_rhs(b, field)
-
-    initial_guess = np.mean(field)
-
-    # set the initial guess
-    x.set(initial_guess)
-
-    ksp.setOperators(A)
-
-    # Solve Ax = b
-    # PETSc.Sys.Print("Solving...")
-    ksp.solve(b, x)
-    # PETSc.Sys.Print("done.")
-
-    # transfer solution to processor 0
-    vec0, scatter = create_scatter(x)
-    scatter_to_0(x, vec0, scatter)
-
-    return vec0, A
-

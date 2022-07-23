@@ -3,6 +3,7 @@ import numpy as np
 import netCDF4
 from uafgi.util import gisutil
 import dggs.data
+from osgeo import gdal
 
 def wrf_info(geo_fname):
     """
@@ -46,6 +47,43 @@ def wrf_info(geo_fname):
         dy]                       # N-S pixel resolution (negative val for north-up images)
 
     return gisutil.RasterInfo(wrf_crs.to_wkt(), nji[1], nji[0], gt_wrf)
+
+
+def write_geotiff(geo_info, data, ofname, flipud=True):
+    """Writes a WRF raster to a GeoTIFF file.
+    geo_info:
+        Geometric info about the raster.
+        Result of wrf_info() above
+    data:
+        The actual raster value.
+        It must be with [j,i] indexing.
+    ofname:
+        File to write
+    flipud:
+        If True, flip the geometry and raster before saving.
+        By default, WRF files are north-down.  With flipud=True
+        by default, this generates GeoTIFF files is standard
+        north-up format (although both work with QGIS).
+        """
+
+    (rows, cols) = data.shape
+    gdalDriver = gdal.GetDriverByName('GTiff')
+    outRaster = gdalDriver.Create(
+        ofname, cols, rows, 1, gdal.GDT_Float32, ['COMPRESS=DEFLATE'])
+
+    if flipud:
+        data = np.flipud(data)
+        geo_info = geo_info.flipud()
+
+    try:
+        outRaster.SetGeoTransform(geo_info.geotransform)
+        outRaster.SetProjection(geo_info.wkt)
+        outBand = outRaster.GetRasterBand(1)
+        outBand.SetNoDataValue(np.nan)
+        outBand.WriteArray(data)
+    finally:
+        outRaster = None
+
 
 
 #class WRFTransformer:

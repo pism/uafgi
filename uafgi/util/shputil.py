@@ -4,7 +4,7 @@ import pyproj
 import subprocess
 import pathlib
 import pandas as pd
-
+from uafgi.util import shputil
 from osgeo import ogr,gdal
 import shapefile
 import shapely.geometry
@@ -182,7 +182,9 @@ def read(fname, read_shapes=True, wkt=None):
     with shapefile.Reader(fname) as reader:
         #fields = reader.fields
         for i in range(0, len(reader)):
-            rec = reader.record(i).as_dict()
+            rrec = reader.record(i)
+            rec = rrec.as_dict()
+            rec['fid'] = rrec.oid    # Include the record ID (fid / oid / objectid; fid is most common name) as a column
 
             if read_shapes:
                 shape_raw = reader.shape(i)
@@ -197,6 +199,7 @@ def read(fname, read_shapes=True, wkt=None):
                 shape0,shape = shapely_converters[shape_raw.shapeType](shape_raw, proj.transform)
                 rec['_shape0'] = shape0    # Raw coordinates
                 rec['_shape'] = shape
+
             yield rec
 
 
@@ -215,7 +218,7 @@ def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='loc', add_pre
     """
 
     df = pd.DataFrame(read(fname, wkt=wkt, read_shapes=read_shapes))
-    df = df.reset_index().rename(columns={'index':'fid'})    # Add a key column
+#    df = df.reset_index().rename(columns={'index':'fid'})    # Add a key column
 
     drops = list()
     renames = dict()
@@ -457,3 +460,44 @@ def crs(shapefile):
     with open(fname) as fin:
         crs = pyproj.CRS.from_string(next(fin))
     return crs
+
+dtype2ogr = {
+    np.dtype('int64'): ogr.OFTInteger,
+    np.dtype('float64'):  ogr.OFTReal,
+}
+def write_df(df, shape_col, shapely_type, ofname, wkt=None):
+
+    # Split into two dataframes
+    shape_series = df[[shape_col]]
+    df1 = df.drop(shape_col, axis=1)
+
+    # Determine type of each field from columns of dataframe
+    field_defs = list()
+    for cname in df1.columns:
+        field_defs.append((cname, dtype2ogr[df1[cname].dtype]))
+
+    print('field_defs ',field_defs)
+    with shputil.ShapefileWriter(ofname, shapely_type, field_defs, wkt=wkt) as writer:
+        for (_,shaperow), (_,row) in zip(shape_series.iterrows(), df1.iterrows()):
+            shape = shaperow[shape_col]
+            print('shape: ', shape)
+            print(dict(**row))
+            writer.write(shape, **row)
+            return
+
+
+
+#def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='loc', add_prefix=None):
+#    """
+#    wkt:
+#        Project shapes into this projection(if they are being read).
+#    read_shapes:
+#        Should the acutal shapes be read?  Or just the metadata?
+#    shape0:
+#        Name to call the "shape0" columns when all is said and done
+#        (i.e. the original shape, before it was reprojected)
+#    Returns columns:
+#        fid:
+#            File ID, the ID used to read this record back with a ShapeFile reader
+#    """
+
