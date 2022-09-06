@@ -1,6 +1,13 @@
 from osgeo import ogr,osr
 import shapely
 
+#def open(fname, driver=None, **kwargs):
+#    """Opens a GDAL datasource.  Raises exception if not found."""
+#    ds = ogr.GetDriverByName(driver).Open(fname, **kwargs)
+#    if ds is None:
+#        raise FileNotFoundException(fname)
+#    return ds
+
 def reproject(src_ds, dst_srs, dst_ds):
     """Reprojects an entire OGR dataset.
 

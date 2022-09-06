@@ -47,10 +47,12 @@ class Makefile(object):
     def __init__(self):
         self.rule_list = list()    # Straight list of all rules [rule, ...]
         self.rules = dict()    # {target : rule}
+        self.targets = list()
 
     def clear(self):
         self.rule_list.clear()
         self.rules.clear()
+        self.targets.clear()
 
     def add(self, rule):
         # Don't add if already added
@@ -60,12 +62,15 @@ class Makefile(object):
                 all_outputs = False
             break
         if all_outputs:
-            return rule.outputs
+            return rule
 
         self.rule_list.append(rule)    # Straight list of all rules
         for output in rule.outputs:
             self.rules[output] = rule
-        return rule.outputs
+
+        self.targets += rule.outputs
+
+        return rule
 
     def format(self):
         """Converts to a (very long) string"""
@@ -86,7 +91,7 @@ class Makefile(object):
 
         return '\n'.join(out)
 
-    def generate(self, targets, odir, tdir_fn=ioutil.TmpDir, flags={}, python_exe=None):
+    def generate(self, odir, tdir_fn=ioutil.TmpDir, flags={}, python_exe=None):
         """Renders the Makefile object as a standard Unix Makefile, along with
         the thunks needed to run it.
 
@@ -156,7 +161,7 @@ class Makefile(object):
         with open(env_sh, 'w') as out:
             subprocess.run(cmd, stdout=out)
 
-        dtargets = dict((x,None) for x in targets)    # uniqify targets list
+        dtargets = dict((x,None) for x in self.targets)    # uniqify targets list
         for ix,(_Makefile,_pythone) in enumerate(((Makefile,pythone), (SlurMakefile, pythone_slurm))):
             with open(_Makefile, 'w') as mout:
                 mout.write('all : {}\n\n'.format(' '.join(dtargets.keys())))
@@ -185,14 +190,14 @@ class Makefile(object):
                 mout.write('\nFORCE :\n\n')
 
 class build(object):
-    def __init__(self, makefile, targets, tdir_fn=ioutil.TmpDir):
+    def __init__(self, makefile, tdir_fn=ioutil.TmpDir):
         """Call this to create an ioutil.TmpDir"""
         self.makefile = makefile
         self.dates = dict()
         self.made = set()
-        self._get_dates(targets)
+        self._get_dates(self.targets)
         self.tdir_fn = tdir_fn
-        self._build(targets)
+        self._build(self.targets)
 
     def _get_dates(self, targets):
         """

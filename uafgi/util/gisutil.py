@@ -80,7 +80,7 @@ class RasterInfo:
             Min, max of region in the file
         self.dx:
             Grid spacing in x direction
-        geotransform: list
+        geotransform: np.array(6)
             GDAL domain used in this file
 
     A geotransform consists in a set of 6 coefficients:

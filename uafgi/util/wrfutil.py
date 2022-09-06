@@ -41,6 +41,9 @@ def wrf_info(geo_fname):
         np.mean(xx_m_wrf[:,0]) - .5*dx,    # edge of x-coord of origin (most westerly pixel)
         dx,                       # W-E pixel width
         0,                        # Row rotation
+        # Projected coordinate space is north-up; whereas raster space (for WRF) is north-down.
+        # Because those two are different, the 0.5 needs to have positive sign.
+        # (If the yare the same, then we would use -0.5*dy)
         np.mean(yy_m_wrf[0,:]) + .5*dy,    # edge of y-coord of origin (most southerly pixel in this case)
         0,                        # Column rotation
 

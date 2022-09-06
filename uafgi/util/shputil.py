@@ -203,7 +203,7 @@ def read(fname, read_shapes=True, wkt=None):
             yield rec
 
 
-def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='loc'):
+def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='shape'):
     """
     wkt:
         Project shapes into this projection(if they are being read).
@@ -352,6 +352,7 @@ class ShapefileWriter(object):
         # Add attributes
 #        print('fd ',self.field_defs)
         for name,ftype in self.field_defs:
+            print('CreateField', name, ftype)
             self.layer.CreateField(ogr.FieldDefn(name, ftype))
         #self.layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
 
@@ -360,7 +361,7 @@ class ShapefileWriter(object):
     def __exit__(self, exc_type, exc_value, exc_traceback):
         self.layer = None
 
-    def write(self, shapely_obj, **fields):
+    def write(self, shapely_obj, fields):
 #        if shapely_obj.geom_type != self.shapely_type:
 #            raise TypeError('Trying to write an object of type {} to a file of type {}'.format(shapely_obj.geom_type, self.shapely_type))
 
@@ -369,6 +370,7 @@ class ShapefileWriter(object):
         ## If there are multiple geometries, put the "for" loop here
 
         # Create a new feature (attribute and geometry)
+#        print('fields = ', [(k,v,type(v)) for k,v in fields.items()])
         defn = self.layer.GetLayerDefn()
         feat = ogr.Feature(defn)
         for field,value in fields.items():
@@ -463,7 +465,8 @@ def crs(shapefile):
     return crs
 
 dtype2ogr = {
-    np.dtype('int64'): ogr.OFTInteger,
+    np.dtype('int64'): ogr.OFTInteger64,
+    np.dtype('int32'): ogr.OFTInteger,
     np.dtype('float64'):  ogr.OFTReal,
 }
 def write_df(df, shape_col, shapely_type, ofname, wkt=None):
@@ -475,13 +478,15 @@ def write_df(df, shape_col, shapely_type, ofname, wkt=None):
     # Determine type of each field from columns of dataframe
     field_defs = list()
     for cname in df1.columns:
+        print('field_defs: {}, {}, {}'.format(cname, df1[cname].dtype, dtype2ogr[df1[cname].dtype]))
         field_defs.append((cname, dtype2ogr[df1[cname].dtype]))
 
     # print('field_defs ',field_defs)
     with shputil.ShapefileWriter(ofname, shapely_type, field_defs, wkt=wkt) as writer:
         for (_,shaperow), (_,row) in zip(shape_series.iterrows(), df1.iterrows()):
             shape = shaperow[shape_col]
-            writer.write(shape, **row)
+#            print('row = ', [(k,v,type(v)) for k,v in row.items()])
+            writer.write(shape, row)
 
 #def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='loc', add_prefix=None):
 #    """

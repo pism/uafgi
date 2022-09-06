@@ -2,7 +2,7 @@ import json,subprocess
 import collections
 import numpy as np
 import netCDF4, cf_units
-from uafgi.util import functional,ogrutil,cfutil,ncutil
+from uafgi.util import functional,ogrutil,cfutil,ncutil,gisutil
 from osgeo import osr,ogr,gdal
 
 def check_error(err):
@@ -12,12 +12,6 @@ def check_error(err):
     if err != 0:
         raise GDALException('GDAL Error {}'.format(err))
 
-def open(fname, driver=None, **kwargs):
-    """Opens a GDAL datasource.  Raises exception if not found."""
-    ds = ogr.GetDriverByName(driver).Open(fname, **kwargs)
-    if ds is None:
-        raise FileNotFoundException(fname)
-    return ds
 
 # -------------------------------------------------------
 
@@ -41,16 +35,48 @@ def file_info(raster_file):
     # TODO: See here how to do the same thing with core GDAL Python calls
     # https://gdal.org/user/raster_data_model.html
 
+    if False:
+        # Get the raw data
+        cmd = ['gdalinfo', '-json', raster_file]
+        js = json.loads(subprocess.check_output(cmd))
 
-    # Get the raw data
-    cmd = ['gdalinfo', '-json', raster_file]
-    js = json.loads(subprocess.check_output(cmd))
+        # I only know how to properly interpret "Area" files
+        md = js['metadata']['']    # For some reason it's a level down
+        assert md['AREA_OR_POINT'] == 'Area'
 
-    # I only know how to properly interpret "Area" files
-    md = js['metadata']['']    # For some reason it's a level down
-    assert md['AREA_OR_POINT'] == 'Area'
+        return gisutil.RasterInfo(js['coordinateSystem']['wkt'], js['size'][0], js['size'][1], js['geoTransform'])
+    else:
+        #info = gdal.Info(raster_file, format='json')
 
-    return gisutil.RasterInfo(js['coordinateSystem']['wkt'], js['size'][0], js['size'][1], js['geoTransform'])
+        # https://drr.ikcest.org/tutorial/k8022
+        ds = gdal.Open(raster_file)
+        return gisutil.RasterInfo(
+            ds.GetProjection(),
+            ds.RasterXSize, ds.RasterYSize,
+            raster.GetGeoTransform())
+
+
+def read_raster(raster_file):
+    """Simple way to read a raster file; and return it as a Numpy Array.
+    Assumes single-band raster files (the usual case)
+
+    Returns: grid_info, data
+        grid_info: gisutil.RasterInfo
+            Description of the raster file's grid
+        data: np.array
+            Data found in the raster file."""
+
+    ds = gdal.Open(raster_file)
+    grid_info = gisutil.RasterInfo(
+        ds.GetProjection(),
+        ds.RasterXSize, ds.RasterYSize,
+        np.array(ds.GetGeoTransform()))
+    band = ds.GetRasterBand(1)
+    nodata_value = band.GetNoDataValue()
+    data = band.ReadAsArray()
+    return grid_info, data, nodata_value
+
+
 # -----------------------------------------------------------------
 def clone_geometry(drivername, filename, grid_info, nBands, eType):
     """Creates a new dataset, based on the geometry of an existing raster
@@ -59,11 +85,11 @@ def clone_geometry(drivername, filename, grid_info, nBands, eType):
     drivername:
         Name of GDAL driver used to create dataset
     filename:
-        Filename for dataset (or '' if driver type 'MEM')
+        Filename for dataset to create (or '' if driver type 'MEM')
     grid_info: GeoGrid (a Duck Type; for implementations grep for GeoGrid)
         Result of RasterInfo() from an existing raster file
     nBands:
-        Number of bankds
+        Number of bands
     eType:
         type of raster (eg gdal.GDT_Byte)
     https://gdal.org/api/gdaldriver_cpp.html
@@ -72,7 +98,8 @@ def clone_geometry(drivername, filename, grid_info, nBands, eType):
 
     driver = gdal.GetDriverByName(drivername)
     ds = driver.Create(filename, grid_info.nx, grid_info.ny, nBands, eType)
-    ds.SetSpatialRef(grid_info.srs)
+    srs = osr.SpatialReference(wkt=grid_info.wkt)
+    ds.SetSpatialRef(srs)
     ds.SetGeoTransform(grid_info.geotransform)
     return ds
 
@@ -89,7 +116,7 @@ def rasterize_polygons(polygon_ds, grid_info):
     is returned as a Numpy array.
 
     polygon_ds:
-        Open GDAL dataset containing polygons in a single layer
+        Open OGR dataset containing polygons in a single layer
         Can be Shapefile, GeoJSON, etc.
         Eg: poly_ds = gdalutil.open(outlines_shp, driver='ESRI Shapefile')
 
@@ -106,7 +133,8 @@ def rasterize_polygons(polygon_ds, grid_info):
     # Reproject original polygon file to a new (internal) dataset
     # src_ds = ogr.GetDriverByName('ESRI Shapefile').CreateDataSource('x.shp')
     src_ds = ogr.GetDriverByName('Memory').CreateDataSource('')
-    ogrutil.reproject(polygon_ds, grid_info.srs, src_ds)
+    srs = osr.SpatialReference(wkt=grid_info.wkt)
+    ogrutil.reproject(polygon_ds, srs, src_ds)
     src_lyr = src_ds.GetLayer()   # Put layer number or name in here
 
     # Create destination raster dataset
