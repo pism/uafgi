@@ -91,7 +91,7 @@ class Makefile(object):
 
         return '\n'.join(out)
 
-    def generate(self, odir, tdir_fn=ioutil.TmpDir, flags={}, python_exe=None):
+    def generate(self, odir, tdir_fn=ioutil.TmpDir, flags={}, python_exe=None, run=False):
         """Renders the Makefile object as a standard Unix Makefile, along with
         the thunks needed to run it.
 
@@ -188,6 +188,11 @@ class Makefile(object):
                     ithunk += 1
 
                 mout.write('\nFORCE :\n\n')
+
+        # Run the makefile we just  genereated
+        if run:
+            cmd = ['make', '-f', Makefile]
+            subprocess.run(cmd)
 
 class build(object):
     def __init__(self, makefile, tdir_fn=ioutil.TmpDir):
