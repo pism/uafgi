@@ -77,6 +77,31 @@ def read_raster(raster_file):
     return grid_info, data, nodata_value
 
 
+def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', type=gdal.GDT_Float64):
+    """
+    type:
+        One of Byte, UInt16, Int16, UInt32, Int32, UInt64, Int64,
+        Float32, Float64, and the complex types CInt16, CInt32,
+        CFloat32, and CFloat64.
+        Must match the datatype of the numpy array data
+        Eg: gdal.GDT_Byte
+    """
+    # https://gis.stackexchange.com/questions/351970/python-gdal-write-a-geotiff-in-colour-from-a-data-array
+
+    # Open output file
+    driver = gdal.GetDriverByName(driver)
+    dst_ds = driver.Create(raster_file, grid_info.nx, grid_info.ny, 1, type)
+
+    # Set the CRS
+    dst_ds.SetProjection(grid_info.wkt)
+    dst_ds.SetGeoTransform(list(grid_info.geotransform))
+
+    # Store the data
+    rb = dst_ds.GetRasterBand(1)
+    if nodata_value is not None:
+        rb.SetNoDataValue(nodata_value)
+    rb.WriteArray(data)
+
 # -----------------------------------------------------------------
 def clone_geometry(drivername, filename, grid_info, nBands, eType):
     """Creates a new dataset, based on the geometry of an existing raster
