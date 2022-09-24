@@ -11,6 +11,20 @@ import shapely.geometry
 
 from uafgi.util import gdalutil,osrutil,pdutil
 
+def expand_list(shapefiles, exts=('.shp', '.shx', '.dbf')):
+    """
+    shapefiles: [filename, ...]
+        List of .shp files
+    Returns: [filename, ...]
+        Original shapefiles, plus all related files with the same root.
+    """
+    ret = list()
+    for fname in shapefiles:
+        if fname.endswith('.shp'):
+            fname = fname[:-4]    # Remove .shp extension
+        ret += ['{}{}'.format(fname,ext) for ext in exts]
+    return ret
+
 shapely2ogr = {
     'Point' : ogr.wkbPoint,
     'Polygon' : ogr.wkbPolygon,

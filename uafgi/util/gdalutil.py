@@ -56,6 +56,14 @@ def file_info(raster_file):
             raster.GetGeoTransform())
 
 
+def grid_info(raster_file):
+    ds = gdal.Open(raster_file)
+    grid_info = gisutil.RasterInfo(
+        ds.GetProjection(),
+        ds.RasterXSize, ds.RasterYSize,
+        np.array(ds.GetGeoTransform()))
+    return grid_info
+
 def read_raster(raster_file):
     """Simple way to read a raster file; and return it as a Numpy Array.
     Assumes single-band raster files (the usual case)
@@ -77,7 +85,7 @@ def read_raster(raster_file):
     return grid_info, data, nodata_value
 
 
-def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', type=gdal.GDT_Float64):
+def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', type=gdal.GDT_Float64, options=['COMPRESS=LZW']):
     """
     type:
         One of Byte, UInt16, Int16, UInt32, Int32, UInt64, Int64,
@@ -89,8 +97,8 @@ def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', typ
     # https://gis.stackexchange.com/questions/351970/python-gdal-write-a-geotiff-in-colour-from-a-data-array
 
     # Open output file
-    driver = gdal.GetDriverByName(driver)
-    dst_ds = driver.Create(raster_file, grid_info.nx, grid_info.ny, 1, type)
+    driver_obj = gdal.GetDriverByName(driver)
+    dst_ds = driver_obj.Create(raster_file, grid_info.nx, grid_info.ny, 1, type, options=options)
 
     # Set the CRS
     dst_ds.SetProjection(grid_info.wkt)
