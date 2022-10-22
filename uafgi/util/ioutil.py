@@ -356,3 +356,32 @@ class TmpDir(object):
 # 
 #     return path
 # 
+
+def readlink(fname):
+    """Reads a symlink, returning the absolute path it points to."""
+    ofname = os.readlink(fname)
+    if os.path.isabs(ofname):
+        return ofname
+    return os.path.abspath(os.path.join(os.path.split(fname)[0], ofname))
+
+def setlink(ifname, ofname):
+    print('setlink ifname: {}'.format(ifname))
+    print('setlink ofname: {}'.format(ofname))
+
+    if os.path.islink(ofname):
+        if os.path.abspath(readlink(ofname)) == os.path.abspath(ifname):
+            return    # Already set correctly
+
+        # It was pointing to the wrong thing, remove the link
+        print('Unlinking: {}'.format(ofname))
+        os.unlink(ofname)
+
+    elif os.path.exists(ofname):
+        if not os.path.islink(ofname):
+            raise ValueError("Trying to set link target {}, it is currently not a link".format(ofname))
+
+    # Set the link!
+#    print(f'ifname: {ifname}')
+#    print(f'')
+    os.symlink(os.path.relpath(ifname, start=os.path.split(ofname)[0]), ofname)
+
