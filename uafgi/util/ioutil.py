@@ -380,6 +380,10 @@ def setlink(ifname, ofname):
         if not os.path.islink(ofname):
             raise ValueError("Trying to set link target {}, it is currently not a link".format(ofname))
 
+    # Create output directory
+    odir,_ = os.path.split(ofname)
+    os.makedirs(odir, exist_ok=True)
+
     # Set the link!
 #    print(f'ifname: {ifname}')
 #    print(f'')
