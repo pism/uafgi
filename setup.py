@@ -8,5 +8,5 @@ setup(
     author_email='eafischer2@alaska.edu',
     description='Some tools for internal use in in research at UAF/GI',
     packages=find_packages(),    
-    python_requires='>3.8',
+    python_requires='>=3.8',
 )
