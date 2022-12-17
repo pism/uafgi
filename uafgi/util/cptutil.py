@@ -71,18 +71,23 @@ CPTRet = collections.namedtuple('CPTRet', ('cmap', 'vmin', 'vmax'))
 _color_modelRE = re.compile('#\s*COLOR_MODEL\s*=\s*(.*)')
 _lineRE = re.compile('\s*([-+0123456789\.]\S*)\s+(\S*)\s+(\S*)\s+(\S*)\s+(\S*)\s+(\S*)\s+(\S*)\s+(\S*)')
 def read_cpt(ifname, reverse=False) :
-    """Parses an already-read cpt file.
-    Args:
-        cpt_str (string):
-            Contents of a cpt file
-        reverse (bool):
-            If true, reverse the colors on this palette
-    Returns:
-        (see cpt())
+    """Reads and parses a CPT file.
+    
+    ifname:
+        Name of CPT file to read
+    reverse:
+        If set, reverse the colors from low-to-high.
+    Returns: CPTRet (cmap, vmin, vmax)
+        cmap: matplotlib.colors.LinearSegmentedColormap
+            The resulting colormap read from the .cpt file
+        vmin, vmax:
+            Minimum and maximum scale values specified in the .cpt file.
     See:
-        http://soliton.vm.bytemark.co.uk/pub/cpt-city/
-        http://osdir.com/ml/python.matplotlib.general/2005-01/msg00023.html
-        http://assorted-experience.blogspot.com/2007/07/custom-colormaps.html
+        For examples of CPT files:
+           http://soliton.vm.bytemark.co.uk/pub/cpt-city/
+        Also:
+           http://osdir.com/ml/python.matplotlib.general/2005-01/msg00023.html
+           http://assorted-experience.blogspot.com/2007/07/custom-colormaps.html
     """
 
     # --------- Read the file
