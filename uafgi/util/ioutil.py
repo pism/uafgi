@@ -38,7 +38,7 @@ def redirect(out=sys.stdout, err=sys.stderr):
 
 @contextlib.contextmanager
 def pushd(path):
-    """A context manager which changes the working directory to the given
+    """A context manager that changes the working directory to the given
     path, and then changes it back to its previous value on exit.
 
     """
@@ -389,3 +389,14 @@ def setlink(ifname, ofname):
 #    print(f'')
     os.symlink(os.path.relpath(ifname, start=os.path.split(ofname)[0]), ofname)
 
+def mkdirs_for_files(files):
+    """Creates all the directories needed to store the files.
+    files: [str, ...]
+        Files whose directories we must create.
+    """
+
+    # Create directories needed for output files
+    dirs = set(os.path.split(x)[0] for x in files)
+    for dir in dirs:
+        print(f'Creating directory: {dir}')
+        os.makedirs(dir, exist_ok=True)
