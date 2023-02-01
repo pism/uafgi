@@ -22,6 +22,7 @@ class RootsDict:
             Should be os.sep of the target platform.
         roots:
         """
+        self.sep = sep
         self.lookup = dict()
         self.sorted = list()
         self.update(roots)
@@ -49,13 +50,20 @@ class RootsDict:
                 return '{'+key+'}' + path[len(root):]
         return path
 
-    def syspath(self, rel):
+    def abspath(self, rel):
         """Returns a path native to the system we're runnin on.
         rel:
             Relative path WITH FORWARD SLASHES"""
-        rel = rel.replace('/', os.sep)
+        rel = rel.replace('/', self.sep)
         path = rel.format(**self.lookup)
         return path
+
+    def bashpath(self, rel):
+        """Like abspath, but converts to bash-style pathname"""
+        wfname = self.abspath(rel).replace('\\', '/')
+        if wfname[1] == ':':
+            wfname = '/{}{}'.format(wfname[0], wfname[2:])
+        return wfname
 
     def convert_to(self, path, dest_roots):
         return dest_roots.abspath(self.relpath(path))
