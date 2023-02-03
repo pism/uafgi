@@ -2,8 +2,21 @@ import pyproj
 import numpy as np
 import netCDF4
 from uafgi.util import gisutil
-import dggs.data
 from osgeo import gdal
+
+# CRS used by WRF
+grs1980_wkt = epsg4019_wkt = \
+"""GEOGCS["Unknown datum based upon the GRS 1980 ellipsoid",
+    DATUM["Not_specified_based_on_GRS_1980_ellipsoid",
+        SPHEROID["GRS 1980",6378137,298.257222101,
+            AUTHORITY["EPSG","7019"]],
+        AUTHORITY["EPSG","6019"]],
+    PRIMEM["Greenwich",0,
+        AUTHORITY["EPSG","8901"]],
+    UNIT["degree",0.01745329251994328,
+        AUTHORITY["EPSG","9122"]],
+    AUTHORITY["EPSG","4019"]]"""
+
 
 def wrf_info(geo_fname):
     """
@@ -29,7 +42,7 @@ def wrf_info(geo_fname):
 
 
     # Convert Gridcell centers from lon/lat to WRF's CRS
-    lonlat_crs = pyproj.CRS.from_string(dggs.data.grs1980_wkt)
+    lonlat_crs = pyproj.CRS.from_string(grs1980_wkt)
     ll2wrf = pyproj.Transformer.from_crs(lonlat_crs, wrf_crs, always_xy=True)
     xx_m_wrf, yy_m_wrf = ll2wrf.transform(lon_m,lat_m)
 

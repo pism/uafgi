@@ -27,6 +27,9 @@ class RootsDict:
         self.sorted = list()
         self.update(roots)
 
+    def __setitem__(self, key, val):
+        self.lookup[key] = val
+
     def update(self, roots_iter):
         """roots_iter: [(key, root), ...]
             Roots as absolute paths, native to the system they're intended to be used on.
@@ -37,39 +40,46 @@ class RootsDict:
         self.sorted = [(len(val),key) for key,val in self.lookup.items()]
         self.sorted.sort(reverse=True)
 
-    def relpath(self, path_sys):
+    def relpath(self, syspath):
         """Given a path, converts as relative to a root, AND WITH FORWARD SLASHES.
-        This needs to be run on the system native to the path_sys and roots
-        path_sys:
+        This needs to be run on the system native to the syspath and roots
+        syspath:
             A path native to the system we're running on."""
-        path = os.path.abspath(os.path.realpath(path_sys)).replace(os.sep, '/')
+        path = os.path.abspath(os.path.realpath(syspath)).replace(os.sep, '/')
         for _,key in self.sorted:
-            print('   try {}, {}'.format(path, self.lookup[key]))
             root = self.lookup[key]
             if path.startswith(root):
                 return '{'+key+'}' + path[len(root):]
         return path
 
-    def abspath(self, rel):
-        """Returns a path native to the system we're runnin on.
+    def syspath(self, rel, bash=False):
+        """Returns a path native to the system we're running on.
         rel:
             Relative path WITH FORWARD SLASHES"""
-        rel = rel.replace('/', self.sep)
-        path = rel.format(**self.lookup)
-        return path
 
-    def bashpath(self, rel):
-        """Like abspath, but converts to bash-style pathname"""
-        wfname = self.abspath(rel).replace('\\', '/')
-        if wfname[1] == ':':
-            wfname = '/{}{}'.format(wfname[0], wfname[2:])
-        return wfname
+        if bash:
+            path = rel.format(**self.lookup).replace('\\', '/')
+            if path[1] == ':':
+                path = '/{}{}'.format(path[0], path[2:])
+            return path
+        else:
+            rel = rel.replace('/', self.sep)
+            path = rel.format(**self.lookup)
+            return path
 
-    def convert_to(self, path, dest_roots):
-        return dest_roots.abspath(self.relpath(path))
 
-#def convert(path, roots0, roots1):
-#    """Converts a pathname from convention of roots0 to convention of roots1"""
-#    return roots1.abspath(roots0.relpath(path))
+    def join(self, *args, bash=False):
+        """For compatibility with old dggs.data.join()"""
+        path = list(args)
+        path[0] = '{'+args[0].upper()+'}'
+        relpath = '/'.join(path)
+        return self.syspath(relpath, bash=bash)
+        
 
-    
+    def convert_to(self, syspath, dest_roots, bash=False):
+        """syspath:
+            A path native to the source system
+        dest_roots:
+            Path configuration for the remote system.
+        """
+        return dest_roots.syspath(self.relpath(syspath), bash=bash)
