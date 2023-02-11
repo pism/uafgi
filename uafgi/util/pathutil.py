@@ -45,11 +45,11 @@ class RootsDict:
         This needs to be run on the system native to the syspath and roots
         syspath:
             A path native to the system we're running on."""
-        path = os.path.abspath(os.path.realpath(syspath)).replace(os.sep, '/')
+        path = os.path.abspath(syspath)#.replace(os.sep, '/')
         for _,key in self.sorted:
             root = self.lookup[key]
             if path.startswith(root):
-                return '{'+key+'}' + path[len(root):]
+                return ('{'+key+'}' + path[len(root):]).replace('/', os.sep)
         return path
 
     def syspath(self, rel, bash=False):
