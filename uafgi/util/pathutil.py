@@ -49,7 +49,7 @@ class RootsDict:
         for _,key in self.sorted:
             root = self.lookup[key]
             if path.startswith(root):
-                return ('{'+key+'}' + path[len(root):]).replace('/', os.sep)
+                return ('{'+key+'}' + path[len(root):]).replace(os.sep, '/')
         return path
 
     def syspath(self, rel, bash=False):
