@@ -33,3 +33,4 @@ def pointify(shapes):
         Iterable of Shapely shapes
     """
     return shapely.geometry.MultiPoint(list(itertools.chain(*(shape.coords for shape in shapes))))
+

@@ -2,8 +2,8 @@ import json,subprocess
 import collections
 import numpy as np
 import netCDF4, cf_units
-from uafgi.util import functional,ogrutil,cfutil,ncutil,gisutil
-from osgeo import osr,ogr,gdal
+from uafgi.util import cfutil,ncutil,gisutil
+from osgeo import osr,gdal
 
 def check_error(err):
     """Checks error code return from GDAL functions, and raises an
@@ -144,48 +144,8 @@ def clone_geometry(drivername, filename, grid_info, nBands, eType):
 #      By Michael Diener
 #      p. 60
 
-def rasterize_polygons(polygon_ds, grid_info):
-    """Rasterizes all polygons from polygon_ds into a single raster, which
-    is returned as a Numpy array.
 
-    polygon_ds:
-        Open OGR dataset containing polygons in a single layer
-        Can be Shapefile, GeoJSON, etc.
-        Eg: poly_ds = gdalutil.open(outlines_shp, driver='ESRI Shapefile')
 
-    grid_info: gisutil.RasterInfo
-        Definition of the grid used for fjord
-        Eg: gisutil.RasterInfo(grid_file)
-
-    Returns: np.ndarray
-        Mask equals 1 inside the polygons, and 0 outside.
-    """
-
-    # http://www2.geog.ucl.ac.uk/~plewis/geogg122_current/_build/html/ChapterX_GDAL/OGR_Python.html
-
-    # Reproject original polygon file to a new (internal) dataset
-    # src_ds = ogr.GetDriverByName('ESRI Shapefile').CreateDataSource('x.shp')
-    src_ds = ogr.GetDriverByName('Memory').CreateDataSource('')
-    srs = osr.SpatialReference(wkt=grid_info.wkt)
-    ogrutil.reproject(polygon_ds, srs, src_ds)
-    src_lyr = src_ds.GetLayer()   # Put layer number or name in here
-
-    # Create destination raster dataset
-#    dst_ds = clone_geometry('netCDF', 'x.nc', grid_info, 1,  gdal.GDT_Byte)
-    dst_ds = clone_geometry('MEM', '', grid_info, 1,  gdal.GDT_Byte)
-    dst_rb = dst_ds.GetRasterBand(1)
-    dst_rb.Fill(0) #initialise raster with zeros
-    dst_rb.SetNoDataValue(0)
-
-    maskvalue = 1
-    bands = [1]          # Bands to rasterize into
-    burn_values = [1]    # Burn this value for each band
-    check_error(gdal.RasterizeLayer(dst_ds, bands, src_lyr, burn_values=burn_values))
-
-    dst_ds.FlushCache()
-
-    mask_arr = dst_ds.GetRasterBand(1).ReadAsArray()
-    return mask_arr
 
 
 
