@@ -1,4 +1,4 @@
-import os,sys,time
+import os,sys,time,datetime
 import importlib
 import dill
 
@@ -16,8 +16,10 @@ with tdir_fn() as tdir:    # See ioutil.TmpDir
 
     # run with timing
     t0 = time.time()
-    print('START TIME: {}'.format(t0))
+    t0_s = datetime.datetime.fromtimestamp(t0).astimezone().isoformat()
+    print(f'START TIME: {t0} ({t0_s})')
     rule.action(tdir)
     t1 = time.time()
-    print('END TIME: {}'.format(t1))
+    t1_s = datetime.datetime.fromtimestamp(t1).astimezone().isoformat()
+    print(f'END TIME: {t1} ({t1_s})')
     print('ELAPSED TIME (s): {}'.format(t1-t0))

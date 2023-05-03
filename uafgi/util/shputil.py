@@ -366,7 +366,7 @@ class ShapefileWriter(object):
         # Add attributes
 #        print('fd ',self.field_defs)
         for name,ftype in self.field_defs:
-            print('CreateField', name, ftype)
+            #print('CreateField', name, ftype)
             self.layer.CreateField(ogr.FieldDefn(name, ftype))
         #self.layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
 
@@ -492,7 +492,7 @@ def write_df(df, shape_col, shapely_type, ofname, wkt=None):
     # Determine type of each field from columns of dataframe
     field_defs = list()
     for cname in df1.columns:
-        print('field_defs: {}, {}, {}'.format(cname, df1[cname].dtype, dtype2ogr[df1[cname].dtype]))
+        #print('field_defs: {}, {}, {}'.format(cname, df1[cname].dtype, dtype2ogr[df1[cname].dtype]))
         field_defs.append((cname, dtype2ogr[df1[cname].dtype]))
 
     # print('field_defs ',field_defs)

@@ -22,7 +22,7 @@ import string
 import tempfile
 import filecmp
 import shutil
-import signal
+import signal,functools
 
 # http://stackoverflow.com/questions/13250050/redirecting-the-output-of-a-python-function-from-stdout-to-variable-in-python
 @contextlib.contextmanager
@@ -400,3 +400,17 @@ def mkdirs_for_files(files):
     for dir in dirs:
         print(f'Creating directory: {dir}')
         os.makedirs(dir, exist_ok=True)
+
+@functools.lru_cache()
+def _listdir(dir):
+    return sorted(os.listdir(dir))
+
+def matchdir(dir, sregex):
+    regex = re.compile(sregex)
+    ret = list()
+    for file in _listdir(dir):
+        match = regex.match(file)
+        if match is not None:
+            ret.append(match)
+    return ret
+

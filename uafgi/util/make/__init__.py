@@ -172,7 +172,10 @@ class Makefile(object):
                     thunk_fname = os.path.join(odir, 'thunk_{:04d}.pik'.format(ithunk))
 
                     # Write the rule in the Makefile
-                    mout.write('{} : {}{}\n'.format(
+                    # (Use order-only preprequisites to avoid checking timestamps)
+                    # https://www.gnu.org/software/make/manual/html_node/Prerequisite-Types.html
+                    # https://stackoverflow.com/questions/58039810/makefiles-what-is-an-order-only-prerequisite
+                    mout.write('{} : | {}{}\n'.format(
                         ' '.join(rule.outputs),
                         ' '.join(rule.inputs) if rule.require_inputs else '',
                         ' FORCE' if rule.force else ''))
