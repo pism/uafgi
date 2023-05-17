@@ -3,6 +3,7 @@ import numpy as np
 import netCDF4
 from uafgi.util import gisutil
 from osgeo import gdal
+import gridfill
 
 # CRS used by WRF
 grs1980_wkt = epsg4019_wkt = \
@@ -22,6 +23,8 @@ def wrf_info(geo_fname):
     """
     geo_fname:
         Name of the WRF geometry definition file (eg: geosoutheast.nc)
+    Returns: uafgi.util.RasterInfo
+        Definition of WRF coordinate system / etc.
     """
     with netCDF4.Dataset(geo_fname) as nc:
         # Get lon/lat of center of each gridcell
@@ -64,6 +67,44 @@ def wrf_info(geo_fname):
 
     return gisutil.RasterInfo(wrf_crs.to_wkt(), nji[1], nji[0], gt_wrf)
 
+def read_raw(data_fname, vname, units=None, fill_holes=False):
+    """Reads a WRF file with the corect geometry, etc.
+    units: str (OPTIONAL)
+        Convert to these units"""
+
+    with netCDF4.Dataset(data_fname) as nc:
+        # Masked array
+        ncv = nc.variables[vname]
+        orig_units = ncv.units
+        print('read_raw ', data_fname, vname)
+        print(ncv.__dict__)
+        nodata_value = ncv._FillValue if hasattr(ncv, '_FillValue') else None
+        masked_data = ncv[:,:]    # sx3(j=south_north,i=west_east)
+
+    if fill_holes:
+        data_rawunits, converged = gridfill.fill(masked_data, 1, 0, .1)#, itermax=10000)
+    else:
+        data_rawunits = np.ma.getdata(masked_data)
+    if units is None:
+        return data_rawunits,nodata_value
+    return cfutil.convert(data_rawunits, orig_units, units),nodata_value
+
+def read(data_fname, vname, geo_fname, units=None):
+    """Read WRF dataset with same return as gdalutil.read_raster()
+    data_fname:
+        Name of raw WRF NetCDF file
+    geo_fname:
+        Name of the WRF geometry definition file (eg: geosoutheast.nc)
+    Returns: grid_info, data
+        grid_info: gisutil.RasterInfo
+            Description of the raster file's grid
+        data: np.array
+            Data found in the raster file.
+    """
+    geo_info = wrf_info(geo_fname)
+    data,nodata_value = read_raw(data_fname, vname, units=units)
+    return geo_info, data
+
 
 def write_geotiff(geo_info, data, ofname, flipud=True):
     """Writes a WRF raster to a GeoTIFF file.
@@ -99,8 +140,6 @@ def write_geotiff(geo_info, data, ofname, flipud=True):
         outBand.WriteArray(data)
     finally:
         outRaster = None
-
-
 
 #class WRFTransformer:
 #    def __init__(self, geo_fname, scene_wkt):
