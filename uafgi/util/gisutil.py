@@ -1,4 +1,12 @@
 import numpy as np
+from osgeo import osr
+
+# Simple Cartesian CRS ("Ortographic")
+def _ortho_wkt():
+    p = osr.SpatialReference()
+    p.ImportFromProj4("+proj=ortho+lat_0=0+lon_0=0+x_0=0+y_0=0")
+    return p.ExportToWkt()
+ortho_wkt = _ortho_wkt()
 
 #def invert_geotransform(GT):
 #    # The GeoTransform is a tuple of 6 values,

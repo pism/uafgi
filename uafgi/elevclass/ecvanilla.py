@@ -1,3 +1,7 @@
+import numpy as np
+from functools import cached_property
+from uafgi.elevclass import ecmaker
+
 class MatrixSet:
     def __init__(self, IuA, elevI, gridA, hcdefs):
         self.IuA = IuA
@@ -5,9 +9,23 @@ class MatrixSet:
         self.gridA = gridA
         self.hcdefs = hcdefs
 
+    @property
+    def nhc(self):
+        return len(self.hcdefs)
+
+    def unpackE(self, ixE):
+        """
+        iE:
+            Collection of 1D indices on the Elevation grid
+        Returns: iA, ec
+            iA: Each E gridcell on the A grid
+            ec: Elevation class index of each E gridcell
+        """
+        return np.divmod(ixE, self.nhc)
+
     @cached_property
     def IuE(self):
-        return ecmaker.extend_to_elev(self.IuA, self.elevI, self.hcdefs)
+        return ecmaker.IuE(self.IuA, self.elevI, self.hcdefs)
 
     @cached_property
     def IvA(self):
