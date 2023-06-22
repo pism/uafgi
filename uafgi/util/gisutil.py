@@ -121,6 +121,10 @@ class RasterInfo:
     def nxy(self):
         return self.nx * self.ny
 
+    @property
+    def shape(self):
+        return (self.ny, self.nx)
+
     def flipud(self):
         """Turns a north-up geometry into north-down (or vice versa)"""
         GT = self.geotransform
