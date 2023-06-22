@@ -97,7 +97,7 @@ class RasterInfo:
         GT(2) row rotation (typically zero).
         GT(3) y-coordinate of the upper-left corner of the upper-left pixel.
         GT(4) column rotation (typically zero).
-        GT(5) n-s pixel resolution / pixel height (negative value for a north-up image).
+        GT(5) n-s pixel resolution / pixel height (negative value for a north-up image, i.e. the standard for GeoTIFF where the northernmost row of pixels comes first in the file).
     """
 
     def __init__(self, wkt, nx, ny, geotransform):

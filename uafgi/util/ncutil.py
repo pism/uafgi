@@ -323,9 +323,14 @@ class Schema:
 
         # Create variables
         for name,nsv in self.vars.items():
-            ncv = ncout.createVariable(name, nsv.dtype, nsv.dims, **var_kwargs)
+            if '_FillValue' in nsv.attrs:
+                ncv = ncout.createVariable(
+                    name, nsv.dtype, nsv.dims, fill_value=nsv.attrs['_FillValue'], **var_kwargs)
+            else:
+                ncv = ncout.createVariable(name, nsv.dtype, nsv.dims, **var_kwargs)
             for key,val in nsv.attrs.items():
-                ncv.setncattr(key, val)
+                if key != '_FillValue':
+                    ncv.setncattr(key, val)
 
         # Create attributes
         for key,val in self.attrs.items():

@@ -109,7 +109,7 @@ def read_raster(raster_file):
     """Simple way to read a raster file; and return it as a Numpy Array.
     Assumes single-band raster files (the usual case)
 
-    Returns: grid_info, data
+    Returns: grid_info, data, nodata_value
         grid_info: gisutil.RasterInfo
             Description of the raster file's grid
         data: np.array

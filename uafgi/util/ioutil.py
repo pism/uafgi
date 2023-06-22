@@ -414,3 +414,33 @@ def matchdir(dir, sregex):
             ret.append(match)
     return ret
 
+
+def sync_files(dir0, fnames, dir1, flags=['--copy-links', '-avz']):
+    """Syncs a list of files into the same location in the remote harness.
+
+    dir0:
+        Source directory
+    fnames:
+        Filenames inside of dir0
+        (os.path.relpath() will be used to get relative paths)
+    dir1:
+        Destination directory
+    """
+
+    # Get names of the files, relative to the harness
+    fnames_rel = [os.path.relpath(x, dir0) for x in fnames]
+
+    # Write the names to a file contain a list of filenames
+    os.makedirs(dir1, exist_ok=True)
+    list_file = os.path.join(dir1, '_files.txt')
+    with open(list_file, 'w') as out:
+        out.write('\n'.join(fnames_rel))
+        out.write('\n')
+
+    # Run rsync
+    # Create output directory
+    cmd = ['rsync'] + flags + ['--files-from={}'.format(list_file),
+        dir0, dir1)    # No remote hosts in this rsync
+
+    print(cmd)
+    subprocess.run(cmd)

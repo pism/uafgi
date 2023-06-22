@@ -76,8 +76,8 @@ def read_raw(data_fname, vname, units=None, fill_holes=False):
         # Masked array
         ncv = nc.variables[vname]
         orig_units = ncv.units
-        print('read_raw ', data_fname, vname)
-        print(ncv.__dict__)
+        #print('read_raw ', data_fname, vname)
+        #print(ncv.__dict__)
         nodata_value = ncv._FillValue if hasattr(ncv, '_FillValue') else None
         masked_data = ncv[:,:]    # sx3(j=south_north,i=west_east)
 
@@ -100,10 +100,12 @@ def read(data_fname, vname, geo_fname, units=None):
             Description of the raster file's grid
         data: np.array
             Data found in the raster file.
+        nodata_value:
+            Indicates no data for a gridcell in data
     """
     geo_info = wrf_info(geo_fname)
     data,nodata_value = read_raw(data_fname, vname, units=units)
-    return geo_info, data
+    return geo_info, data, nodata_value
 
 
 def write_geotiff(geo_info, data, ofname, flipud=True):
