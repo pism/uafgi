@@ -16,7 +16,7 @@
 
 import contextlib
 import sys
-import os
+import os,subprocess
 import re
 import string
 import tempfile
@@ -415,7 +415,7 @@ def matchdir(dir, sregex):
     return ret
 
 
-def sync_files(dir0, fnames, dir1, flags=['--copy-links', '-avz']):
+def sync_files(dir0, fnames, dir1, flags=['--copy-links', '-avzr']):
     """Syncs a list of files into the same location in the remote harness.
 
     dir0:
@@ -439,8 +439,15 @@ def sync_files(dir0, fnames, dir1, flags=['--copy-links', '-avz']):
 
     # Run rsync
     # Create output directory
+    # NOTE: As per rsync man page, -r is normally implied by -a; but
+    # here it is needed because --files-from is used.
     cmd = ['rsync'] + flags + ['--files-from={}'.format(list_file),
-        dir0, dir1)    # No remote hosts in this rsync
+        dir0, dir1]    # No remote hosts in this rsync
 
     print(cmd)
     subprocess.run(cmd)
+
+
+
+
+# [1]+  Stopped                 jupyter notebook --no-browser --port 1234
