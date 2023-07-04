@@ -5,6 +5,41 @@ from uafgi.util import gisutil
 from osgeo import gdal
 import gridfill
 
+# From the gridfill docs...
+#def gridfill.fill(grids, xdim, ydim, eps, relax=.6, itermax=100, initzonal=False,
+#         cyclic=False, verbose=False):
+#    """
+#    Fill missing values in grids with values derived by solving
+#    Poisson's equation using a relaxation scheme.
+#    **Arguments:**
+#    *grid*
+#        A masked array with missing values to fill.
+#    *xdim*, *ydim*
+#        The numbers of the dimensions in *grid* that represent the
+#        x-coordinate and y-coordinate respectively.
+#    *eps*
+#        Tolerance for determining the solution complete.
+#    **Keyword arguments:**
+#    *relax*
+#        Relaxation constant. Usually 0.45 <= *relax* <= 0.6. Defaults to
+#        0.6.
+#    *itermax*
+#        Maximum number of iterations of the relaxation scheme. Defaults
+#        to 100 iterations.
+#    *initzonal*
+#        If *False* missing values will be initialized to zero, if *True*
+#        missing values will be initialized to the zonal mean. Defaults
+#        to *False*.
+#    *cyclic*
+#        Set to *False* if the x-coordinate of the grid is not cyclic,
+#        set to *True* if it is cyclic. Defaults to *False*.
+#    *verbose*
+#        If *True* information about algorithm performance will be
+#        printed to stdout, if *False* nothing is printed. Defaults to
+#        *False*.
+#    """
+
+
 # CRS used by WRF
 grs1980_wkt = epsg4019_wkt = \
 """GEOGCS["Unknown datum based upon the GRS 1980 ellipsoid",
