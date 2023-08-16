@@ -30,6 +30,9 @@ class RootsDict:
     def __setitem__(self, key, val):
         self.lookup[key] = val
 
+    def __getitem__(self, key):
+        return self.lookup[key]
+
     def update(self, roots_iter):
         """roots_iter: [(key, root), ...]
             Roots as absolute paths, native to the system they're intended to be used on.

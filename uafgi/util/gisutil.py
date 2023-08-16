@@ -186,7 +186,8 @@ class RasterInfo:
         ir = GT[0] + x*GT[1] + y*GT[2]
         jr = GT[3] + x*GT[4] + y*GT[5]
 
-        return int(np.round(ir)), int(np.round(jr))
+#        return np.round(ir), np.round(jr)
+        return np.round(ir).astype('i'), np.round(jr).astype('i')
 
 # ====================================================
 # From PISM

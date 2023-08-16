@@ -105,6 +105,14 @@ def grid_info(raster_file):
         np.array(ds.GetGeoTransform()))
     return grid_info
 
+def read_grid(raster_file):
+    ds = gdal.Open(raster_file)
+    grid_info = gisutil.RasterInfo(
+        ds.GetProjection(),
+        ds.RasterXSize, ds.RasterYSize,
+        np.array(ds.GetGeoTransform()))
+    return grid_info
+
 def read_raster(raster_file):
     """Simple way to read a raster file; and return it as a Numpy Array.
     Assumes single-band raster files (the usual case)
