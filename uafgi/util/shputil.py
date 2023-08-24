@@ -482,6 +482,7 @@ dtype2ogr = {
     np.dtype('int64'): ogr.OFTInteger64,
     np.dtype('int32'): ogr.OFTInteger,
     np.dtype('float64'):  ogr.OFTReal,
+    np.dtype('float32'):  ogr.OFTReal,
 }
 def write_df(df, shape_col, shapely_type, ofname, wkt=None):
 
