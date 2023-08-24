@@ -102,8 +102,8 @@ class RasterInfo:
 
     def __init__(self, wkt, nx, ny, geotransform):
         self.wkt = wkt
-        self.nx = nx
-        self.ny = ny
+        self.nx = int(nx)
+        self.ny = int(ny)
         self.geotransform = geotransform
 
         # Calculated items
