@@ -134,7 +134,7 @@ def read_raster(raster_file):
     return grid_info, data, nodata_value
 
 
-def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', type=gdal.GDT_Float64, options=['COMPRESS=LZW']):
+def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', type=gdal.GDT_Float64, options=['COMPRESS=LZW', 'TFW=YES']):
     """
     type:
         One of Byte, UInt16, Int16, UInt32, Int32, UInt64, Int64,
