@@ -494,7 +494,7 @@ def write_df(df, shape_col, shapely_type, ofname, wkt=None):
     field_defs = list()
     for cname in df1.columns:
         #print('field_defs: {}, {}, {}'.format(cname, df1[cname].dtype, dtype2ogr[df1[cname].dtype]))
-        print('field_defs: {}, {}'.format(cname, df1[cname].dtype))
+        #print('field_defs: {}, {}'.format(cname, df1[cname].dtype))
         field_defs.append((cname, dtype2ogr[df1[cname].dtype]))
 
     # print('field_defs ',field_defs)
