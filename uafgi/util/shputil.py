@@ -336,7 +336,7 @@ def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='shape'):
 class ShapefileWriter(object):
     """Writes Shapely objects into a shapefile"""
 
-    def __init__(self, fname, shapely_type, field_defs, wkt=None, zip=False):
+    def __init__(self, fname, shapely_type, field_defs, wkt=None, zip_format=True):
         """
         fname:
             Name of file to create
@@ -354,7 +354,7 @@ class ShapefileWriter(object):
         self.shapely_type = shapely_type
         self.field_defs = field_defs
         self.wkt = wkt
-        self.zip = zip
+        self.zip_format = zip_format
 
     def __enter__(self):
         ogr_type = shapely2ogr[self.shapely_type]
@@ -378,7 +378,7 @@ class ShapefileWriter(object):
         self.ds = None    # Close the file
 
         # Pack it into an additional zip file
-        if self.zip:
+        if self.zip_format:
 #        if True:
             fname_noext = os.path.splitext(self.fname)[0]
             with zipfile.ZipFile(f'{fname_noext}.zip', 'w') as ozip:
@@ -499,7 +499,7 @@ dtype2ogr = {
     np.dtype('float64'):  ogr.OFTReal,
     np.dtype('float32'):  ogr.OFTReal,
 }
-def write_df(df, shape_col, shapely_type, ofname, wkt=None, zip=False):
+def write_df(df, shape_col, shapely_type, ofname, wkt=None, zip_format=False):
 
     # Split into two dataframes
     shape_series = df[[shape_col]]
@@ -513,7 +513,7 @@ def write_df(df, shape_col, shapely_type, ofname, wkt=None, zip=False):
         field_defs.append((cname, dtype2ogr[df1[cname].dtype]))
 
     # print('field_defs ',field_defs)
-    with shputil.ShapefileWriter(ofname, shapely_type, field_defs, wkt=wkt, zip=zip) as writer:
+    with shputil.ShapefileWriter(ofname, shapely_type, field_defs, wkt=wkt, zip_format=zip_format) as writer:
         for (_,shaperow), (_,row) in zip(shape_series.iterrows(), df1.iterrows()):
             shape = shaperow[shape_col]
 #            print('row = ', [(k,v,type(v)) for k,v in row.items()])
