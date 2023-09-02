@@ -383,10 +383,9 @@ class ShapefileWriter(object):
             fname_noext = os.path.splitext(self.fname)[0]
             with zipfile.ZipFile(f'{fname_noext}.zip', 'w') as ozip:
                 leaf_noext = os.path.split(fname_noext)[1]
-                for ext in ('.dbf'  '.prj'  '.shp'  '.shx'):
+                for ext in ('.dbf',  '.prj',  '.shp',  '.shx'):
                     ifname = f'{fname_noext}{ext}'
                     arcname = f'{leaf_noext}{ext}'
-                    print('AA1 ', ifname, arcname)
                     ozip.write(ifname, arcname=arcname, compress_type=zipfile.ZIP_DEFLATED)
             
 
