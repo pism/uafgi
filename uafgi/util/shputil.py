@@ -1,4 +1,4 @@
-import os
+import os,zipfile
 import numpy as np
 import pyproj
 import subprocess
