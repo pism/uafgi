@@ -336,7 +336,7 @@ def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='shape'):
 class ShapefileWriter(object):
     """Writes Shapely objects into a shapefile"""
 
-    def __init__(self, fname, shapely_type, field_defs, wkt=None):
+    def __init__(self, fname, shapely_type, field_defs, wkt=None, zip=False):
         """
         fname:
             Name of file to create
@@ -354,6 +354,7 @@ class ShapefileWriter(object):
         self.shapely_type = shapely_type
         self.field_defs = field_defs
         self.wkt = wkt
+        self.zip = zip
 
     def __enter__(self):
         ogr_type = shapely2ogr[self.shapely_type]
@@ -374,6 +375,19 @@ class ShapefileWriter(object):
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         self.layer = None
+        self.ds = None    # Close the file
+
+        # Pack it into an additional zip file
+        if self.zip:
+            fname_noext = os.path.splitext(self.fname)[0]
+            with zipfile.ZipFile(f'{fname_noext}.zip', 'w') as ozip:
+                leaf_noext = os.path.split(fname_noext)[1]
+                for ext in ('.dbf'  '.prj'  '.shp'  '.shx'):
+                    arcname = f'{leaf_noext}{ext}'
+                    ifname = f'{fname_noext}{ext}'
+                    ozip.write(ifname, arcname=arcname, compress_type=zipfile.ZIP_DEFLATED)
+            
+
 
     def write(self, shapely_obj, fields):
 #        if shapely_obj.geom_type != self.shapely_type:
@@ -484,7 +498,7 @@ dtype2ogr = {
     np.dtype('float64'):  ogr.OFTReal,
     np.dtype('float32'):  ogr.OFTReal,
 }
-def write_df(df, shape_col, shapely_type, ofname, wkt=None):
+def write_df(df, shape_col, shapely_type, ofname, wkt=None, zip=False):
 
     # Split into two dataframes
     shape_series = df[[shape_col]]
@@ -498,7 +512,7 @@ def write_df(df, shape_col, shapely_type, ofname, wkt=None):
         field_defs.append((cname, dtype2ogr[df1[cname].dtype]))
 
     # print('field_defs ',field_defs)
-    with shputil.ShapefileWriter(ofname, shapely_type, field_defs, wkt=wkt) as writer:
+    with shputil.ShapefileWriter(ofname, shapely_type, field_defs, wkt=wkt, zip=zip) as writer:
         for (_,shaperow), (_,row) in zip(shape_series.iterrows(), df1.iterrows()):
             shape = shaperow[shape_col]
 #            print('row = ', [(k,v,type(v)) for k,v in row.items()])
