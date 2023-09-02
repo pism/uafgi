@@ -378,7 +378,8 @@ class ShapefileWriter(object):
         self.ds = None    # Close the file
 
         # Pack it into an additional zip file
-        if self.zip:
+#        if self.zip:
+        if True:
             fname_noext = os.path.splitext(self.fname)[0]
             with zipfile.ZipFile(f'{fname_noext}.zip', 'w') as ozip:
                 leaf_noext = os.path.split(fname_noext)[1]
