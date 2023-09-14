@@ -215,10 +215,10 @@ class RasterInfo:
         return shapely.geometry.Polygon(coords)
 
 
-class DomainGrid(gisutil.RasterInfo):    # (gridD)
+class DomainGrid(RasterInfo):    # (gridD)
     """Define a bunch of rectangles indexed by (idom, jdom).
 
-    NOTE: This is a subclass of gisutil.RasterInfo.  Each "gridcell"
+    NOTE: This is a subclass of RasterInfo.  Each "gridcell"
           in RasterInfo represents a domain in DomainGrid.
     """
 
@@ -305,7 +305,7 @@ class DomainGrid(gisutil.RasterInfo):    # (gridD)
         nx = (self.dx + 2*mx)/ dx
         ny = (self.dy + 2*my)/ dy
 
-        return gisutil.RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
+        return RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
 
 
     def global(self, dx, dy):
@@ -321,7 +321,7 @@ class DomainGrid(gisutil.RasterInfo):    # (gridD)
         nx = self.nx * (self.dx / dx)
         ny = self.ny * (self.dy / dy)
 
-        return gisutil.RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
+        return RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
 
 
 
