@@ -288,6 +288,11 @@ class DomainGrid(RasterInfo):    # (gridD)
             Resolution of the subgrid
         margin:
             Should a margin be kept around the subgrid?
+        Returns: RasterInfo with extra fields
+            grid.gridG
+                The global hi-res grid we are a logical part of
+            grid.i0, grid.j0
+                Origin of this grid within gridG
         """
 
         if margin:
@@ -299,15 +304,25 @@ class DomainGrid(RasterInfo):    # (gridD)
 
 
         GT = self.geotransform
-        x0 = GT[0] + GT[1] * i - mx
-        y0 = GT[3] + GT[5] * j - my
 
-        nx = (self.dx + 2*mx)/ dx
-        ny = (self.dy + 2*my)/ dy
+        offsetx = self.dx * i - mx
+        x0 = self.x0 + offsetx
 
-        return RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
+        offsety = self.dy * j - my
+        y0 = self.y0 + offsety
+
+        nx = int((self.dx + 2*mx)/ dx + 0.5)
+        ny = int((self.dy + 2*my)/ dy + 0.5)
+
+        grid = RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
+
+        # Add (i0, j0) indicating this is a subset of the global grid
+        grid.gridG = self.globals(dx, dy)
+        grid.i0 = int(offsetx / dx + 0.5)
+        grid.j0 = int(offsety / dy + 0.5)
 
 
+    @functools.lru_cache()
     def global(self, dx, dy):
         """Produces a grid for the ENTIRE extent of gridD, at (dx,dy) fine resolution.
 
