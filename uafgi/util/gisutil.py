@@ -1,5 +1,6 @@
 import numpy as np
 from osgeo import osr
+import shapely
 
 # Simple Cartesian CRS ("Ortographic")
 def _ortho_wkt():
@@ -169,11 +170,14 @@ class RasterInfo:
         return [x0,x1,y0,y1]
 
 
-    def to_xy(self, i, j):
-        """Converts an (i,j) pixel address to an (x,y) geographic value"""
+    def to_xy(self, i, j, center=False):
+        """Converts an (i,j) pixel address to an (x,y) geographic value
+        center:
+            Convert to center or corner of gridcell?"""
+
         GT = self.geotransform
-        Xgeo = GT[0] + i*GT[1] + j*GT[2]
-        Ygeo = GT[3] + i*GT[4] + j*GT[5]
+        Xgeo = GT[0] + i*GT[1] + j*GT[2] + (0.5*self.dx if center else 0)
+        Ygeo = GT[3] + i*GT[4] + j*GT[5] + (0.5*self.dy if center else 0)
         return Xgeo,Ygeo
 
 
@@ -187,7 +191,31 @@ class RasterInfo:
         jr = GT[3] + x*GT[4] + y*GT[5]
 
 #        return np.round(ir), np.round(jr)
-        return np.round(ir).astype('i'), np.round(jr).astype('i')
+#        return np.round(ir).astype('i'), np.round(jr).astype('i')
+
+        # if x0=0 and dx=10, then anything x \in [0,10) should have i=0
+        return np.floor(ir).astype('i'), np.floor(jr).astype('i')
+
+
+    def bounding_box(self):
+        """Returns: Shapely rectangle of the bounding box of this grid."""
+
+        GT = self.geotransform
+        x0 = self.x0
+        x1 = self.x0 + self.nx * self.dx
+        y0 = self.y0
+        y1 = self.y0 + self.ny * self.dy
+
+        coords = [
+            (x0,y0),
+            (x1,y0),
+            (x1,y1),
+            (x0,y1),
+            (x0,y0)]
+        return shapely.geometry.Polygon(coords)
+
+
+
 
 # ====================================================
 # From PISM

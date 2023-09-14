@@ -134,7 +134,7 @@ def read_raster(raster_file):
     return grid_info, data, nodata_value
 
 
-def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', type=gdal.GDT_Float64, options=['COMPRESS=LZW', 'TFW=YES']):
+def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', type=gdal.GDT_Float64, options=['COMPRESS=LZW', 'TFW=YES'], metadata=None):
     """
     type:
         One of Byte, UInt16, Int16, UInt32, Int32, UInt64, Int64,
@@ -142,6 +142,8 @@ def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', typ
         CFloat32, and CFloat64.
         Must match the datatype of the numpy array data
         Eg: gdal.GDT_Byte
+    metadata: (OPTIONAL) {str: str, ...} or [(str, str), ...]
+        Dict of metadata to store in file (key/value pairs)
     """
     # https://gis.stackexchange.com/questions/351970/python-gdal-write-a-geotiff-in-colour-from-a-data-array
 
@@ -152,6 +154,8 @@ def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', typ
     # Set the CRS
     dst_ds.SetProjection(grid_info.wkt)
     dst_ds.SetGeoTransform(list(grid_info.geotransform))
+    if metadata is not None:
+        dst_ds.SetMetadata(metadata)
 
     # Store the data
     rb = dst_ds.GetRasterBand(1)
