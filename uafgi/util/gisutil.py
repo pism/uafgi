@@ -319,7 +319,7 @@ class DomainGrid(RasterInfo):    # (gridD)
         grid = RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
 
         # Add (i0, j0) indicating this is a subset of the global grid
-        grid.gridG = self.globals(dx, dy)
+        grid.gridG = self.global_grid(dx, dy)
         grid.i0 = int(offsetx / dx + 0.5)
         grid.j0 = int(offsety / dy + 0.5)
 
