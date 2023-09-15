@@ -219,7 +219,7 @@ class RasterInfo:
 
 class DomainGrid(RasterInfo):    # (gridD)
     """Define a bunch of rectangles indexed by (idom, jdom).
-    (0,0) is in the north-west of the region.  ("North-up" order)
+    (0,0) is in the north-west of the region.  ("North-up" order, consistent with typical GeoTIFF)
 
     NOTE: This is a subclass of RasterInfo.  Each "gridcell"
           in RasterInfo represents a domain in DomainGrid.
@@ -256,25 +256,26 @@ class DomainGrid(RasterInfo):    # (gridD)
         xx,yy = index_box.exterior.coords.xy
         x0 = xx[0]
         x1 = xx[1]
-        y0 = yy[0]
-        y1 = yy[2]
+        y0 = yy[2]    # Enforce North-up order
+        y1 = yy[0]
+
+        xsgn = np.sign(x1-x0)
+        ysgn = np.sign(y1-y0)
 
         print('fffffffffff ', xx, yy)
 
         # The domain grid should have the same north-up / north-down
         # as the original grid it's on top of.
         assert x0 < x1
-        assert y0 < y1
+        assert y0 > y1    # North-up order
 
-        dx = domain_size[0] #* xsgn
-        dy = domain_size[1] #* ysgn
+        dx = domain_size[0] * xsgn
+        dy = domain_size[1] * ysgn
 
         # Round region to integral domain size
         x0 = dx * math.floor(x0/dx)
         y0 = dy * math.floor(y0/dy)
 
-        #xsgn = np.sign(x1-x0)
-        #ysgn = np.sign(y1-y0)
 
         # Number of domains in the overall experiment region
         nx = math.ceil((x1-x0)/dx)    # type=int
