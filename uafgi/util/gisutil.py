@@ -2,6 +2,7 @@ import functools
 import numpy as np
 from osgeo import osr
 import shapely
+from uafgi.util import shputil
 
 # Simple Cartesian CRS ("Ortographic")
 def _ortho_wkt():
