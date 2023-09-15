@@ -1,3 +1,4 @@
+import functools
 import numpy as np
 from osgeo import osr
 import shapely
