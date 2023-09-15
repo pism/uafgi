@@ -274,7 +274,7 @@ class DomainGrid(RasterInfo):    # (gridD)
 
         # Round region to integral domain size
         x0 = dx * math.floor(x0/dx)
-        y0 = dy * math.floor(y0/dy)
+        y0 = dy * math.ceil(y0/dy)    # North-up order
 
 
         # Number of domains in the overall experiment region
