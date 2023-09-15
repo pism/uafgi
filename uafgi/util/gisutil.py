@@ -219,6 +219,7 @@ class RasterInfo:
 
 class DomainGrid(RasterInfo):    # (gridD)
     """Define a bunch of rectangles indexed by (idom, jdom).
+    (0,0) is in the north-west of the region.  ("North-up" order)
 
     NOTE: This is a subclass of RasterInfo.  Each "gridcell"
           in RasterInfo represents a domain in DomainGrid.
@@ -257,6 +258,8 @@ class DomainGrid(RasterInfo):    # (gridD)
         x1 = xx[1]
         y0 = yy[0]
         y1 = yy[2]
+
+        print('fffffffffff ', xx, yy)
 
         # The domain grid should have the same north-up / north-down
         # as the original grid it's on top of.
