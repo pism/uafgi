@@ -262,8 +262,6 @@ class DomainGrid(RasterInfo):    # (gridD)
         xsgn = np.sign(x1-x0)
         ysgn = np.sign(y1-y0)
 
-        print('fffffffffff ', xx, yy)
-
         # The domain grid should have the same north-up / north-down
         # as the original grid it's on top of.
         assert x0 < x1
