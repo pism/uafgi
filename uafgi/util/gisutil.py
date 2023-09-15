@@ -286,6 +286,35 @@ class DomainGrid(RasterInfo):    # (gridD)
         self.domain_margin = domain_margin
         self.index_box = index_box
 
+    def poly(self, ix, iy, margin=False):
+        """Returns given rectangle by index.
+        ix, iy:
+            Coordinates of the domain within the overall region.
+        margin:
+            Should the margin be included in the box returned?
+        Returns:
+            A rectangular polygon, oriented in standard (counter clockwise) fashion.
+        """
+
+        GT = self.geotransform
+        x0 = GT[0] + GT[1] * ix
+        y0 = GT[3] + GT[5] * iy
+
+        if margin:
+            mx = np.sign(self.dx) * self.domain_margin[0]
+            my = np.sign(self.dy) * self.domain_margin[1]
+        else:
+            mx = 0
+            my = 0
+
+        coords = [
+            (x0-mx, y0-my),
+            (x0+self.dx+mx, y0-my),
+            (x0+self.dx+mx, y0+self.dy+my),
+            (x0-mx, y0+self.dy+my),
+            (x0-mx, y0-my)]
+        return shapely.geometry.Polygon(coords)
+
     def sub(self, i, j, resx, resy, margin=True):
         """Produes a sub-grid for the (i,j) domain (north-up)
         resx,resy:
