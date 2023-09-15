@@ -323,6 +323,7 @@ class DomainGrid(RasterInfo):    # (gridD)
         grid.i0 = int(offsetx / dx + 0.5)
         grid.j0 = int(offsety / dy + 0.5)
 
+        return grid
 
     @functools.lru_cache()
     def global_grid(self, dx, dy):
