@@ -332,7 +332,7 @@ class DomainGrid(RasterInfo):    # (gridD)
            * The origin of this grid is the same as origin of self.subgrid(0,0)
         """
 
-        GT = self.self.geotransform
+        GT = self.geotransform
         x0 = GT[0]
         y0 = GT[3]
         nx = self.nx * (self.dx / dx)
