@@ -288,9 +288,9 @@ class DomainGrid(RasterInfo):    # (gridD)
         self.domain_margin = domain_margin
         self.index_box = index_box
 
-    def sub(self, i, j, dx, dy, margin=True):
+    def sub(self, i, j, resx, resy, margin=True):
         """Produes a sub-grid for the (i,j) domain (north-up)
-        dx,dy:
+        resx,resy:
             Resolution of the subgrid
             (Both positive numbers; will be adjusted based on self.dx / self.dy)
         margin:
@@ -306,8 +306,8 @@ class DomainGrid(RasterInfo):    # (gridD)
         ysgn = np.sign(self.dy)
 
         # Get sign of (dx,dy) same as (self.dx, self.dy)
-        dx = abs(dx)*xsgn
-        dy = abs(dy)*ysgn
+        dx = abs(resx)*xsgn
+        dy = abs(resy)*ysgn
 
         if margin:
             mx = xsgn * self.domain_margin[0]
