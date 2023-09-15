@@ -323,7 +323,7 @@ class DomainGrid(RasterInfo):    # (gridD)
 
 
     @functools.lru_cache()
-    def global(self, dx, dy):
+    def global_grid(self, dx, dy):
         """Produces a grid for the ENTIRE extent of gridD, at (dx,dy) fine resolution.
 
         NOTES:
