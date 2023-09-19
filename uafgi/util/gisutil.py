@@ -329,8 +329,8 @@ class DomainGrid(RasterInfo):    # (gridD)
 
         GT = self.geotransform
 
-        nx = int(0.5 + (maxx - minx) / dx)
-        ny = int(0.5 + (maxy - miny) / dy)
+        nx = int(0.5 + (maxx - minx) / resx)
+        ny = int(0.5 + (maxy - miny) / resy)
 
         grid = RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
 
