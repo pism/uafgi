@@ -24,6 +24,18 @@ class Int(schema.Use):
         self.description = description
         self.units = None
 
+def _nullable_int(s):
+    if s is None or s == '.':
+        return None
+    return int(s)
+
+class NullableInt(schema.Use):
+    def __init__(self, description, error=None):
+        super().__init__(_nullable_int, error=error)
+        self.format = repr
+        self.description = description
+        self.units = None
+
 # -----------------------------------------------
 _bool_values = {
     '0': False, '1': True,
