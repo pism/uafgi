@@ -159,7 +159,7 @@ class RasterInfo:
 
     # -----------------------------------------------------
 
-    @property
+    @functools.lru_cache()
     def extent(self, order='xxyy'):
         """Provide extents.
         order:
