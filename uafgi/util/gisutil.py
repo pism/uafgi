@@ -160,8 +160,12 @@ class RasterInfo:
     # -----------------------------------------------------
 
     @property
-    def extents(self):
-        """Provide extents for Cartopy / Matplotlib's ax.set_extent()"""
+    def extent(self, order='xxyy'):
+        """Provide extents.
+        order:
+            xxyy: for Cartopy / Matplotlib's ax.set_extent()
+            xyxy: Compatible with ArcGIS extents
+        """
         gt = self.geotransform
         x0 = gt[0]
         x1 = x0 + gt[1] * self.nx
@@ -169,7 +173,10 @@ class RasterInfo:
         y0 = gt[3]
         y1 = y0 + gt[5] * self.ny
 
-        return [x0,x1,y0,y1]
+        if order == 'xyxy':
+            return [x0,y0,x1,y1]
+        else:
+            return [x0,x1,y0,y1]
 
 
     def to_xy(self, i, j, center=False):
@@ -316,25 +323,26 @@ class DomainGrid(RasterInfo):    # (gridD)
             (x0-mx, y0-my)]
         return shapely.geometry.Polygon(coords)
 
-    def subgrid(self, minx, miny, maxx, maxy, resx, resy):
-        xsgn = np.sign(self.dx)
-        ysgn = np.sign(self.dy)
-
-        x0 = minx if xsgn>0 else maxx
-        y0 = miny if ysgn>0 else maxy
-
-        # Get sign of (dx,dy) same as (self.dx, self.dy)
-        dx = abs(resx)*xsgn
-        dy = abs(resy)*ysgn
-
-        GT = self.geotransform
-
-        nx = int(0.5 + (maxx - minx) / resx)
-        ny = int(0.5 + (maxy - miny) / resy)
-
-        grid = RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
-
-        return grid
+# This is duplicate of sub()
+#    def subgrid(self, minx, miny, maxx, maxy, resx, resy):
+#        xsgn = np.sign(self.dx)
+#        ysgn = np.sign(self.dy)
+#
+#        x0 = minx if xsgn>0 else maxx
+#        y0 = miny if ysgn>0 else maxy
+#
+#        # Get sign of (dx,dy) same as (self.dx, self.dy)
+#        dx = abs(resx)*xsgn
+#        dy = abs(resy)*ysgn
+#
+#        GT = self.geotransform
+#
+#        nx = int(0.5 + (maxx - minx) / resx)
+#        ny = int(0.5 + (maxy - miny) / resy)
+#
+#        grid = RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
+#
+#        return grid
 
 
     def sub(self, i, j, resx, resy, margin=True):
