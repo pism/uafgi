@@ -162,6 +162,7 @@ class RasterInfo:
     @functools.lru_cache()
     def extent(self, order='xxyy'):
         """Provide extents.
+
         order:
             xxyy: for Cartopy / Matplotlib's ax.set_extent()
             xyxy: Compatible with ArcGIS extents
@@ -172,6 +173,13 @@ class RasterInfo:
 
         y0 = gt[3]
         y1 = y0 + gt[5] * self.ny
+
+        # Make sure that x1>=x0 and y1>=y0
+        if gt[1] < 0:
+            x0,x1 = x1,x0    # swap
+        if gt[5] < 0:
+            y0,y1 = y1,y0
+
 
         if order == 'xyxy':
             return [x0,y0,x1,y1]
