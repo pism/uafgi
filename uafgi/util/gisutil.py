@@ -323,26 +323,27 @@ class DomainGrid(RasterInfo):    # (gridD)
             (x0-mx, y0-my)]
         return shapely.geometry.Polygon(coords)
 
-# This is duplicate of sub()
-#    def subgrid(self, minx, miny, maxx, maxy, resx, resy):
-#        xsgn = np.sign(self.dx)
-#        ysgn = np.sign(self.dy)
-#
-#        x0 = minx if xsgn>0 else maxx
-#        y0 = miny if ysgn>0 else maxy
-#
-#        # Get sign of (dx,dy) same as (self.dx, self.dy)
-#        dx = abs(resx)*xsgn
-#        dy = abs(resy)*ysgn
-#
-#        GT = self.geotransform
-#
-#        nx = int(0.5 + (maxx - minx) / resx)
-#        ny = int(0.5 + (maxy - miny) / resy)
-#
-#        grid = RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
-#
-#        return grid
+    def subgrid(self, minx, miny, maxx, maxy, resx, resy):
+        """Produce an arbitary subgrid, based on a rectangle."""
+
+        xsgn = np.sign(self.dx)
+        ysgn = np.sign(self.dy)
+
+        x0 = minx if xsgn>0 else maxx
+        y0 = miny if ysgn>0 else maxy
+
+        # Get sign of (dx,dy) same as (self.dx, self.dy)
+        dx = abs(resx)*xsgn
+        dy = abs(resy)*ysgn
+
+        GT = self.geotransform
+
+        nx = int(0.5 + (maxx - minx) / resx)
+        ny = int(0.5 + (maxy - miny) / resy)
+
+        grid = RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
+
+        return grid
 
 
     def sub(self, i, j, resx, resy, margin=True):
