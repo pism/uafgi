@@ -1,4 +1,4 @@
-import os
+import os,pathlib
 
 # https://stackoverflow.com/questions/6718196/determine-prefix-from-a-set-of-similar-strings
 # Return the longest prefix of all list elements.
@@ -28,7 +28,7 @@ class RootsDict:
         self.update(roots)
 
     def __setitem__(self, key, val):
-        self.lookup[key] = val
+        self.lookup[key] = pathlib.Path(val)
 
     def __getitem__(self, key):
         return self.lookup[key]
@@ -39,8 +39,8 @@ class RootsDict:
         """
         for key,path in roots_iter:
             print(f'root[{key}] = {path}')
-            self.lookup[key] = path
-        self.sorted = [(len(val),key) for key,val in self.lookup.items()]
+            self.lookup[key] = pathlib.Path(path)
+        self.sorted = [(len(str(val)),key) for key,val in self.lookup.items()]
         self.sorted.sort(reverse=True)
 
     def relpath_key(self, syspath, key):
