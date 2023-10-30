@@ -71,14 +71,14 @@ class RootsDict:
 
     def syspath(self, rel, bash=False):
         """Returns a path native to the system we're running on.
-        rel:
+        rel: pathlib.PurePosixPath
             Relative path WITH FORWARD SLASHES"""
 
         if bash:
-            path = rel.format(**self.lookup).replace('\\', '/')
+            path = str(rel).format(**self.lookup)
             if path[1] == ':':
                 path = '/{}{}'.format(path[0], path[2:])
-            return path
+            return pathlib.Path(path)
         else:
             rel = rel.replace('/', self.sep)
             path = rel.format(**self.lookup)
