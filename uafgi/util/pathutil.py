@@ -63,9 +63,9 @@ class RootsDict:
         path = os.path.abspath(os.path.realpath(syspath))#.replace(os.sep, '/')
         for _,key in self.sorted:
             root = self.lookup[key]
-            if path.startswith(root):
+            if str(path).startswith(root):
                 return ('{'+key+'}' + path[len(root):]).replace(os.sep, '/')
-        return path
+        return pathlib.Path(path)
 
 
     def syspath(self, rel, bash=False):
