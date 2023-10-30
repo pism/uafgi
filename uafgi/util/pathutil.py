@@ -78,11 +78,11 @@ class RootsDict:
             path = str(rel).format(**self.lookup)
             if path[1] == ':':
                 path = '/{}{}'.format(path[0], path[2:])
-            return pathlib.Path(path)
+            return pathlib.PurePosixPath(path)
         else:
-            rel = rel.replace('/', self.sep)
+            rel = str(rel).replace('/', self.sep)
             path = rel.format(**self.lookup)
-            return path
+            return pathlib.Path(path)
 
 
     def join(self, *args, bash=False):
