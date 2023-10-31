@@ -85,13 +85,11 @@ class RootsDict:
             if part0[1] == ':':
                 part0 = '/' + part0[0]
 
-
             # Assemble as PurePosixPath (for bash)
             return pathlib.PurePosixPath(part0) / path0.parts[1:] / rel.parts[1:]
 
         else:
-            # Add initial stem as posix path
-            path0 = rel.parts[0].format(**self.lookup)
+            path0 = pathlib.PureSysPath(rel.parts[0].format(**self.lookup))
             return path0 / rel.parts[1:]
 #            return self.PureSysPath(part0, rel.parts[1:])
 
