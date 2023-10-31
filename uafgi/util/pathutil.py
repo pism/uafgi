@@ -89,7 +89,7 @@ class RootsDict:
             return pathlib.PurePosixPath(part0) / path0.parts[1:] / rel.parts[1:]
 
         else:
-            path0 = pathlib.PureSysPath(rel.parts[0].format(**self.lookup))
+            path0 = self.PureSysPath(rel.parts[0].format(**self.lookup))
             return path0 / rel.parts[1:]
 #            return self.PureSysPath(part0, rel.parts[1:])
 
