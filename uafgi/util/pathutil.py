@@ -22,6 +22,7 @@ class RootsDict:
             Class to use in constructing system path for this type of system.
         roots:
         """
+        assert not isinstance(PureSyspath, str)
         self.PureSysPath = PureSysPath
         self.lookup = dict()
         self.sorted = list()
