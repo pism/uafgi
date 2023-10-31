@@ -76,7 +76,7 @@ class RootsDict:
 
         if bash:
             # Add initial stem as posix path
-            path0 = self.SysPath(rel.parts[0].format(**self.lookup))
+            path0 = self.PureSysPath(rel.parts[0].format(**self.lookup))
 
             # Convert drive letter
             part0 = path0.parts[0]
@@ -91,13 +91,13 @@ class RootsDict:
         else:
             # Add initial stem as posix path
             part0 = rel.parts[0].format(**self.lookup)
-            return self.SysPath(part0, rel.parts[1:])
+            return self.PureSysPath(part0, rel.parts[1:])
 
 
     def join(self, *args, bash=False):
         """For compatibility with old dggs.data.join()"""
         part0 = self.lookup[args[0].upper()]
-        return self.SysPath(part0, *args[1:])
+        return self.PureSysPath(part0, *args[1:])
         
 
     def convert_to(self, syspath, dest_roots, bash=False):
