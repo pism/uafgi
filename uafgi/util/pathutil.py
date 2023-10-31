@@ -96,7 +96,7 @@ class RootsDict:
 
     def join(self, *args, bash=False):
         """For compatibility with old dggs.data.join()"""
-        part0 = self.lookup(args[0].upper())
+        part0 = self.lookup[args[0].upper()]
         return self.SysPath(part0, *args[1:])
         
 
