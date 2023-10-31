@@ -78,8 +78,8 @@ class RootsDict:
         rel = pathlib.PurePosixPath(rel)
         if bash:
             # Add initial stem as posix path
-            part0 = rel.parts[0].format(**self.lookup)
-            print('ppppppppppp ', part0)
+            path0 = self.PureSyspath(rel.parts[0].format(**self.lookup))
+            print('ppppppppppp ', path0)
 
             # Convert drive letter
             part0 = path0.parts[0]
