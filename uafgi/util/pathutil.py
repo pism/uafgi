@@ -17,12 +17,12 @@ def commonprefix(m):
 class RootsDict:
     """Manage conversion between full pathnames and user-provided root
     directories."""
-    def __init__(self, sep, roots):
-        """sep:
-            Should be os.sep of the target platform.
+    def __init__(self, PureSysPath, roots):
+        """PureSysPath:
+            Class to use in constructing system path for this type of system.
         roots:
         """
-        self.sep = sep
+        self.PureSysPath = PureSysPath
         self.lookup = dict()
         self.sorted = list()
         self.update(roots)
@@ -75,14 +75,24 @@ class RootsDict:
             Relative path WITH FORWARD SLASHES"""
 
         if bash:
-            path = str(rel).format(**self.lookup)
-            if path[1] == ':':
-                path = '/{}{}'.format(path[0], path[2:])
-            return pathlib.PurePosixPath(path)
+            # Add initial stem as posix path
+            part0 = rel.parts[0].format(**self.lookup)
+            path0 = self.SysPath(part0)
+
+            # Convert drive letter
+            part0 = path0.parts[0]
+            if part0[1] == ':':
+                part0 = '/' + part0[0]
+
+
+            # Assemble as PurePosixPath (for bash)
+            all_parts = [part0] + list(path0.parts[1:]) + list(rel.parts[1:])
+            return pathlib.PurePosixPath(*all_parts)
+
         else:
-            rel = str(rel).replace('/', self.sep)
-            path = rel.format(**self.lookup)
-            return pathlib.Path(path)
+            # Add initial stem as posix path
+            part0 = rel.parts[0].format(**self.lookup)
+            return self.SysPath(part0, rel.parts[1:])
 
 
 #    def join(self, *args, bash=False):
