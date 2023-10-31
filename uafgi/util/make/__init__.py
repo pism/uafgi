@@ -161,7 +161,7 @@ class Makefile(object):
         with open(env_sh, 'w') as out:
             subprocess.run(cmd, stdout=out)
 
-        dtargets = dict((str()x,None) for x in self.targets)    # uniqify targets list
+        dtargets = dict((str(x),None) for x in self.targets)    # uniqify targets list
         for ix,(_Makefile,_pythone) in enumerate(((Makefile,pythone), (SlurMakefile, pythone_slurm))):
             with open(_Makefile, 'w') as mout:
                 mout.write('all : {}\n\n'.format(' '.join(dtargets.keys())))
