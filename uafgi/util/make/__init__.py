@@ -26,8 +26,8 @@ class Rule(gicollections.MutableNamedTuple):
             self.action(tdir)
 
     def __str__(self):
-        inputs = '\n'.join(['    '+x for x in self.inputs])
-        outputs = '\n'.join(['    '+x for x in self.outputs])
+        inputs = '\n'.join(['    '+str(x) for x in self.inputs])
+        outputs = '\n'.join(['    '+str(x) for x in self.outputs])
 
         fmt = """Makefile Rule:
 INPUTS:
