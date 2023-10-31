@@ -75,6 +75,7 @@ class RootsDict:
         rel: pathlib.PurePosixPath
             Relative path WITH FORWARD SLASHES"""
 
+        rel = pathlib.PurePosixPath(rel)
         if bash:
             # Add initial stem as posix path
             path0 = rel.parts[0].format(**self.lookup)
