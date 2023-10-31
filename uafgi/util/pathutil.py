@@ -90,8 +90,7 @@ class RootsDict:
 
         else:
             path0 = self.PureSysPath(rel.parts[0].format(**self.lookup))
-            return path0 / self.PureSysPath(rel.parts[1:])
-#            return self.PureSysPath(part0, rel.parts[1:])
+            return path0.joinpath(*rel.parts[1:])
 
 
     def join(self, *args, bash=False):
