@@ -361,7 +361,7 @@ class ShapefileWriter(object):
 
         # Now convert it to a shapefile with OGR    
         self.driver = ogr.GetDriverByName('Esri Shapefile')
-        self.ds = self.driver.CreateDataSource(self.fname)
+        self.ds = self.driver.CreateDataSource(str(self.fname))
         self.layer = self.ds.CreateLayer('', osrutil.wkt_to_srs(self.wkt), ogr_type)
 
         # Add attributes
