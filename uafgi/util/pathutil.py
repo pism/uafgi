@@ -56,7 +56,7 @@ class RootsDict:
 #            return pathlib.PurePosixPath(path.relative_to(root))
 #        raise ValueError(f'The path {syspath} must start with {root}')
 
-    def relpath(self, syspath):
+    def relpath(self, syspath, as_str=False):
         """Given a path, converts as relative to a root, AND WITH FORWARD SLASHES.
         This needs to be run on the system native to the syspath and roots
         syspath:
@@ -67,10 +67,14 @@ class RootsDict:
             root = self.lookup[key]
             if root in path.parents:
                 return pathlib.PurePosixPath('{'+key+'}') / path.relative_to(root)
-        return pathlib.PurePosixPath(path)
+        ret = pathlib.PurePosixPath(path)
+
+        if as_str:
+            return str(ret)
+        return ret
 
 
-    def syspath(self, rel, bash=False):
+    def syspath(self, rel, bash=False, as_str=False):
         """Returns a path native to the system we're running on.
         rel: pathlib.PurePosixPath
             Relative path WITH FORWARD SLASHES"""
@@ -83,14 +87,18 @@ class RootsDict:
             # Convert drive letter
             part0 = path0.parts[0]
             if part0[1] == ':':
-                part0 = '/' + part0[0]
+                part0 = '/' + part0[0].lower()
 
             # Assemble as PurePosixPath (for bash)
-            return pathlib.PurePosixPath(part0).joinpath(*path0.parts[1:]).joinpath(*rel.parts[1:])
+            ret = pathlib.PurePosixPath(part0).joinpath(*path0.parts[1:]).joinpath(*rel.parts[1:])
 
         else:
             path0 = self.PureSysPath(rel.parts[0].format(**self.lookup))
-            return path0.joinpath(*rel.parts[1:])
+            ret = path0.joinpath(*rel.parts[1:])
+
+        if as_str:
+            return str(ret)
+        return ret
 
 
     def join(self, *args, bash=False):
