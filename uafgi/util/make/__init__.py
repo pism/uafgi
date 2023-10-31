@@ -164,7 +164,7 @@ class Makefile(object):
         dtargets = dict((x,None) for x in self.targets)    # uniqify targets list
         for ix,(_Makefile,_pythone) in enumerate(((Makefile,pythone), (SlurMakefile, pythone_slurm))):
             with open(_Makefile, 'w') as mout:
-                mout.write('all : {}\n\n'.format(' '.join(str(dtargets.keys())))
+                mout.write('all : {}\n\n'.format(' '.join(str(dtargets.keys()))))
 
                 odir = os.path.realpath(odir)
                 ithunk = 0
