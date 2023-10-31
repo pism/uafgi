@@ -24,12 +24,12 @@ class RootsDict:
         """
         assert not isinstance(PureSysPath, str)
         self.PureSysPath = PureSysPath
-        self.lookup = dict()
+        self.lookup = dict()    # key -> self.PureSysPath
         self.sorted = list()
         self.update(roots)
 
     def __setitem__(self, key, val):
-        self.lookup[key] = pathlib.Path(val)
+        self.lookup[key] = self.PureSysPath(val)
 
     def __getitem__(self, key):
         return self.lookup[key]
@@ -40,7 +40,7 @@ class RootsDict:
         """
         for key,path in roots_iter:
             print(f'root[{key}] = {path}')
-            self.lookup[key] = pathlib.Path(path)
+            self.lookup[key] = self.PureSysPath(path)
         self.sorted = [(len(str(val)),key) for key,val in self.lookup.items()]
         self.sorted.sort(reverse=True)
 
@@ -77,7 +77,7 @@ class RootsDict:
 
         if bash:
             # Add initial stem as posix path
-            path0 = self.PureSysPath(rel.parts[0].format(**self.lookup))
+            path0 = rel.parts[0].format(**self.lookup)
 
             # Convert drive letter
             part0 = path0.parts[0]
@@ -86,13 +86,13 @@ class RootsDict:
 
 
             # Assemble as PurePosixPath (for bash)
-            all_parts = [part0] + list(path0.parts[1:]) + list(rel.parts[1:])
-            return pathlib.PurePosixPath(*all_parts)
+            return pathlib.PurePosixPath(part0) / path0.parts[1:] / rel.parts[1:]
 
         else:
             # Add initial stem as posix path
-            part0 = rel.parts[0].format(**self.lookup)
-            return self.PureSysPath(part0, rel.parts[1:])
+            path0 = rel.parts[0].format(**self.lookup)
+            return path0 / rel.parts[1:]
+#            return self.PureSysPath(part0, rel.parts[1:])
 
 
     def join(self, *args, bash=False):
