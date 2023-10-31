@@ -43,17 +43,17 @@ class RootsDict:
         self.sorted = [(len(str(val)),key) for key,val in self.lookup.items()]
         self.sorted.sort(reverse=True)
 
-    def relpath_key(self, syspath, key):
-        """Given a path, converts as relative to a specified root, AND WITH FORWARD SLASHES.
-        This needs to be run on the system native to the syspath and roots
-        syspath:
-            A path native to the system we're running on.
-        """
-        path = os.path.abspath(os.path.realpath(syspath))#.replace(os.sep, '/')
-        root = self.lookup[key]
-        if path.startswith(root):
-            return path[len(root)+1:].replace(os.sep, '/')
-        raise ValueError(f'The path {syspath} must start with {root}')
+#    def relpath_key(self, syspath, key):
+#        """Given a path, converts as relative to a specified root, AND WITH FORWARD SLASHES.
+#        This needs to be run on the system native to the syspath and roots
+#        syspath:
+#            A path native to the system we're running on.
+#        """
+#        path = os.path.abspath(os.path.realpath(syspath))#.replace(os.sep, '/')
+#        root = self.lookup[key]
+#        if root in path.parents:
+#            return pathlib.PurePosixPath(path.relative_to(root))
+#        raise ValueError(f'The path {syspath} must start with {root}')
 
     def relpath(self, syspath):
         """Given a path, converts as relative to a root, AND WITH FORWARD SLASHES.
@@ -66,7 +66,7 @@ class RootsDict:
             root = self.lookup[key]
             if root in path.parents:
                 return pathlib.PurePosixPath('{'+key+'}') / path.relative_to(root)
-        return pathlib.Path(path)
+        return pathlib.PurePosixPath(path)
 
 
     def syspath(self, rel, bash=False):
@@ -85,12 +85,12 @@ class RootsDict:
             return pathlib.Path(path)
 
 
-    def join(self, *args, bash=False):
-        """For compatibility with old dggs.data.join()"""
-        path = list(args)
-        path[0] = '{'+args[0].upper()+'}'
-        relpath = '/'.join(path)
-        return self.syspath(relpath, bash=bash)
+#    def join(self, *args, bash=False):
+#        """For compatibility with old dggs.data.join()"""
+#        path = list(args)
+#        path[0] = '{'+args[0].upper()+'}'
+#        relpath = '/'.join(path)
+#        return self.syspath(relpath, bash=bash)
         
 
     def convert_to(self, syspath, dest_roots, bash=False):
