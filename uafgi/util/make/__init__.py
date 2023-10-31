@@ -164,7 +164,7 @@ class Makefile(object):
         dtargets = dict((x,None) for x in self.targets)    # uniqify targets list
         for ix,(_Makefile,_pythone) in enumerate(((Makefile,pythone), (SlurMakefile, pythone_slurm))):
             with open(_Makefile, 'w') as mout:
-                mout.write('all : {}\n\n'.format(' '.join(dtargets.keys())))
+                mout.write('all : {}\n\n'.format(' '.join(str(dtargets.keys())))
 
                 odir = os.path.realpath(odir)
                 ithunk = 0
@@ -176,8 +176,8 @@ class Makefile(object):
                     # https://www.gnu.org/software/make/manual/html_node/Prerequisite-Types.html
                     # https://stackoverflow.com/questions/58039810/makefiles-what-is-an-order-only-prerequisite
                     mout.write('{} : | {}{}\n'.format(
-                        ' '.join(rule.outputs),
-                        ' '.join(rule.inputs) if rule.require_inputs else '',
+                        ' '.join((str(x) for x in rule.outputs)),
+                        ' '.join((str(x) for x in rule.inputs)) if rule.require_inputs else '',
                         ' FORCE' if rule.force else ''))
                     mout.write("\t. {}; {} -c 'import uafgi.exe.runrule' {}\n\n".format(env_sh, _pythone, thunk_fname))
 
