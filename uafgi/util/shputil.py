@@ -512,7 +512,9 @@ def write_df(df, shape_col, shapely_type, ofname, wkt=None, zip_format=False):
         #print('field_defs: {}, {}, {}'.format(cname, df1[cname].dtype, dtype2ogr[df1[cname].dtype]))
         #print('field_defs: {}, {}'.format(cname, df1[cname].dtype))
         print('df1[cname] = ', cname, df1[cname].dtype)
-        field_defs.append((cname, dtype2ogr[df1[cname].dtype]))
+        dtype = df1[cname].dtype
+        ogrtype = dtype2ogr[dtype]
+        field_defs.append((cname, ogrtype))
 
     # print('field_defs ',field_defs)
     with shputil.ShapefileWriter(ofname, shapely_type, field_defs, wkt=wkt, zip_format=zip_format) as writer:
