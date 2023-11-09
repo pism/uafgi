@@ -104,7 +104,7 @@ class RootsDict:
     def join(self, *args, bash=False):
         """For compatibility with old dggs.data.join()"""
         part0 = self.lookup[args[0].upper()]
-        path_class = pathlig.PurePosixPath if bash else self.PureSysPath
+        path_class = pathlib.PurePosixPath if bash else self.PureSysPath
         return path_class(part0, *args[1:])
         
 
