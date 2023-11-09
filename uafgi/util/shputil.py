@@ -498,6 +498,7 @@ dtype2ogr = {
     np.dtype('int32'): ogr.OFTInteger,
     np.dtype('float64'):  ogr.OFTReal,
     np.dtype('float32'):  ogr.OFTReal,
+    np.dtype('string'):   ogr.OFTWideString,
 }
 def write_df(df, shape_col, shapely_type, ofname, wkt=None, zip_format=False):
 
