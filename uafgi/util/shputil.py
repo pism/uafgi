@@ -511,7 +511,6 @@ def write_df(df, shape_col, shapely_type, ofname, wkt=None, zip_format=False):
     for cname in df1.columns:
         #print('field_defs: {}, {}, {}'.format(cname, df1[cname].dtype, dtype2ogr[df1[cname].dtype]))
         #print('field_defs: {}, {}'.format(cname, df1[cname].dtype))
-        print('df1[cname] = ', cname, df1[cname].dtype)
         dtype = df1[cname].dtype
         ogrtype = dtype2ogr[dtype]
         field_defs.append((cname, ogrtype))
