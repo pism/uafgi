@@ -1,4 +1,5 @@
 import itertools
+import numpy as np
 from osgeo import ogr,osr
 import shapely.geometry
 
