@@ -34,3 +34,31 @@ def pointify(shapes):
     """
     return shapely.geometry.MultiPoint(list(itertools.chain(*(shape.coords for shape in shapes))))
 
+# -----------------------------------------------------------
+def _scale_vec(vec,margin):
+    """Adds a certain length to a vector.  Helper function."""
+    veclen = np.linalg.norm(vec)
+    if (veclen+margin) < 0:
+        raise ValueError('Margin is larger than side')
+    factor = margin / veclen
+    return factor*vec
+
+def add_margin(p,margin):
+    """Adds a margin to a (rotated) rectangle, i.e. a domain rectangle.
+    p: shapely.geometry.Polygon
+        The rectangle
+    margin:
+        Absolute amount to add to length and width.
+        If negative, subtract this amount; cannot subtract more than original length
+    """
+    pts = np.array(p.boundary.coords)
+    edges = np.diff(pts, axis=0)
+    margin2 = .5*margin
+    pts[0,:] += (_scale_vec(edges[3,:],margin2) - _scale_vec(edges[0,:],margin2))
+    pts[1,:] += (_scale_vec(edges[0,:],margin2) - _scale_vec(edges[1,:],margin2))
+    pts[2,:] += (_scale_vec(edges[1,:],margin2) - _scale_vec(edges[2,:],margin2))
+    pts[3,:] += (_scale_vec(edges[2,:],margin2) - _scale_vec(edges[3,:],margin2))
+
+    p = shapely.geometry.Polygon(list(zip(pts[:-1,0], pts[:-1,1])))
+    return p
+# -----------------------------------------------------------
