@@ -195,7 +195,7 @@ class Makefile(object):
         # Run the makefile we just  genereated
         if run:
             cmd = ['make', '-f', Makefile, '-j', str(ncpu)]
-            subprocess.run(cmd)
+            subprocess.run(cmd, check=True)
 
 class build(object):
     def __init__(self, makefile, tdir_fn=ioutil.TmpDir):
