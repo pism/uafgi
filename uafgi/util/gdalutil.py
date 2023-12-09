@@ -132,7 +132,7 @@ def read_raster(raster_file):
         data: np.array
             Data found in the raster file."""
 
-    ds = gdal.Open(raster_file)
+    ds = gdal.Open(str(raster_file))
     grid_info = gisutil.RasterInfo(
         ds.GetProjection(),
         ds.RasterXSize, ds.RasterYSize,
