@@ -158,7 +158,7 @@ def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', typ
 
     # Open output file
     driver_obj = gdal.GetDriverByName(driver)
-    dst_ds = driver_obj.Create(raster_file, grid_info.nx, grid_info.ny, 1, type, options=options)
+    dst_ds = driver_obj.Create(str(raster_file), grid_info.nx, grid_info.ny, 1, type, options=options)
 
     # Set the CRS
     dst_ds.SetProjection(grid_info.wkt)
