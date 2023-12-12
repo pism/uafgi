@@ -1,4 +1,4 @@
-import json,subprocess
+import json,subprocess,typing
 import collections
 import numpy as np
 import netCDF4, cf_units
@@ -122,6 +122,13 @@ def read_grid(raster_file):
         np.array(ds.GetGeoTransform()))
     return grid_info
 
+
+class Raster(typing.NamedTuple):
+    grid: object
+    data: object
+    nodata: object    # Nodata value
+
+
 def read_raster(raster_file):
     """Simple way to read a raster file; and return it as a Numpy Array.
     Assumes single-band raster files (the usual case)
@@ -140,7 +147,7 @@ def read_raster(raster_file):
     band = ds.GetRasterBand(1)
     nodata_value = band.GetNoDataValue()
     data = band.ReadAsArray()
-    return grid_info, data, nodata_value
+    return Raster(grid_info, data, nodata_value)
 
 
 def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', type=gdal.GDT_Float64, options=['COMPRESS=LZW', 'TFW=YES'], metadata=None):
