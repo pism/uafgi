@@ -67,7 +67,8 @@ class RootsDict:
             root = self.lookup[key]
             print('root: ', root)
             print('parents: ', path.parents)
-            if root in path.parents:
+            if str(path).startswith(str(root)):
+#            if root in path.parents:
                 return pathlib.PurePosixPath('{'+key+'}') / path.relative_to(root)
         ret = pathlib.PurePosixPath(path)
 
