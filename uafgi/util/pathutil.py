@@ -62,11 +62,8 @@ class RootsDict:
         syspath:
             A path native to the system we're running on."""
         path = self.PureSysPath(syspath)
-#        path = os.path.abspath(os.path.realpath(syspath))#.replace(os.sep, '/')
         for _,key in self.sorted:
             root = self.lookup[key]
-#            print('root: ', str(root))
-#            print('parents: ', str(path))
 #            if str(path).startswith(str(root)):
             if root in path.parents:
                 return pathlib.PurePosixPath('{'+key+'}') / path.relative_to(root)
