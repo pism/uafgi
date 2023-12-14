@@ -61,6 +61,9 @@ class Makefile(object):
             if output not in self.rules:
                 all_outputs = False
             break
+
+        print('   all_outputs = ', all_outputs)
+
         if all_outputs:
             return rule
 
