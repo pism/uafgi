@@ -68,6 +68,7 @@ class Makefile(object):
             return rule
 
         self.rule_list.append(rule)    # Straight list of all rules
+        print('Adding to rules now length ', len(self.rule_list))
         for output in rule.outputs:
             self.rules[output] = rule
 
