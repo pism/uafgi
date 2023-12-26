@@ -223,9 +223,13 @@ def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='shape'):
         Project shapes into this projection(if they are being read).
     read_shapes:
         Should the acutal shapes be read?  Or just the metadata?
+    wkt:
+        Projection (CRS) to use, overrides one in shapefile
     shape0:
         Name to call the "shape0" columns when all is said and done
         (i.e. the original shape, before it was reprojected)
+    shape:
+        Name to call final shape column
     Returns columns:
         fid:
             File ID, the ID used to read this record back with a ShapeFile reader
@@ -512,7 +516,11 @@ def write_df(df, shape_col, shapely_type, ofname, wkt=None, zip_format=False):
         #print('field_defs: {}, {}, {}'.format(cname, df1[cname].dtype, dtype2ogr[df1[cname].dtype]))
         #print('field_defs: {}, {}'.format(cname, df1[cname].dtype))
         dtype = df1[cname].dtype
-        ogrtype = dtype2ogr[dtype]
+        try:
+            ogrtype = dtype2ogr[dtype]
+        except KeyError:
+            print(d'Error on colmn {cname}')
+            raise
         field_defs.append((cname, ogrtype))
 
     # print('field_defs ',field_defs)
