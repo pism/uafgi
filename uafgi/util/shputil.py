@@ -519,7 +519,7 @@ def write_df(df, shape_col, shapely_type, ofname, wkt=None, zip_format=False):
         try:
             ogrtype = dtype2ogr[dtype]
         except KeyError:
-            print(d'Error on colmn {cname}')
+            print(f'Error on colmn {cname}')
             raise
         field_defs.append((cname, ogrtype))
 
