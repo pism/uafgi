@@ -128,11 +128,11 @@ def read_raw(data_fname, vname, units=None, fill_holes=False, keep_time=True):
     # Get rid of Time dimension
     if (not keep_time) and len(val.shape) == 3:
         val = val[0,:]
-    return val
+    return val,nodata_value
 
-    if units is None:
-        return data_rawunits,nodata_value
-    val = cfutil.convert(data_rawunits, orig_units, units),nodata_value
+#    if units is None:
+#        return data_rawunits,nodata_value
+#    val = cfutil.convert(data_rawunits, orig_units, units),nodata_value
 
 
 
