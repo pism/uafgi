@@ -102,7 +102,8 @@ def wrf_info(geo_fname):
 
     return gisutil.RasterInfo(wrf_crs.to_wkt(), nji[1], nji[0], gt_wrf)
 
-def read_raw(data_fname, vname, units=None, fill_holes=False):
+
+def read_raw(data_fname, vname, units=None, fill_holes=False, keep_time=True):
     """Reads a WRF file with the corect geometry, etc.
     units: str (OPTIONAL)
         Convert to these units"""
@@ -120,9 +121,24 @@ def read_raw(data_fname, vname, units=None, fill_holes=False):
         data_rawunits, converged = gridfill.fill(masked_data, 1, 0, .1)#, itermax=10000)
     else:
         data_rawunits = np.ma.getdata(masked_data)
+
+    # Convert units to glaciological units if needed
+    val = data_rawunits if units is None else cfutil.convert(data_rawunits, orig_units, units)
+
+    # Get rid of Time dimension
+    if (not keep_time) and len(val.shape) == 3:
+        val = val[0,:]
+    return val
+
     if units is None:
         return data_rawunits,nodata_value
-    return cfutil.convert(data_rawunits, orig_units, units),nodata_value
+    val = cfutil.convert(data_rawunits, orig_units, units),nodata_value
+
+
+
+
+
+
 
 def read(data_fname, vname, geo_fname, units=None):
     """Read WRF dataset with same return as gdalutil.read_raster()
