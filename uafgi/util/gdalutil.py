@@ -107,7 +107,7 @@ def is_netcdf_file(fname):
 
 def grid_info(raster_file):
     """Extracts a RasterInfo from a GAL-openable raster file"""
-    ds = gdal.Open(raster_file)
+    ds = gdal.Open(str(raster_file))
     grid_info = gisutil.RasterInfo(
         ds.GetProjection(),
         ds.RasterXSize, ds.RasterYSize,
@@ -115,7 +115,7 @@ def grid_info(raster_file):
     return grid_info
 
 def read_grid(raster_file):
-    ds = gdal.Open(raster_file)
+    ds = gdal.Open(str(raster_file))
     grid_info = gisutil.RasterInfo(
         ds.GetProjection(),
         ds.RasterXSize, ds.RasterYSize,
@@ -432,3 +432,73 @@ def regrid(idata, igrid_info, inodata_value, ogrid_info, onodata_value, resample
     # GRA_Sum = 13 , GRA_RMS = 14 
     gdal.ReprojectImage(ids, ods, ids.GetProjection(), ods.GetProjection(), resample_algo)
     return odata
+# -------------------------------------------------------1
+# CPLErr GDALComputeProximity(GDALRasterBandH hSrcBand, GDALRasterBandH hProximityBand, char **papszOptions, GDALProgressFunc pfnProgress, void *pProgressArg)
+# Compute the proximity of all pixels in the image to a set of pixels in the source image.
+# 
+# This function attempts to compute the proximity of all pixels in the image to a set of pixels in the source image. The following options are used to define the behavior of the function. By default all non-zero pixels in hSrcBand will be considered the "target", and all proximities will be computed in pixels. Note that target pixels are set to the value corresponding to a distance of zero.
+# 
+# The progress function args may be NULL or a valid progress reporting function such as GDALTermProgress/NULL.
+# 
+# Options:
+# 
+# VALUES=n[,n]*
+# 
+# A list of target pixel values to measure the distance from. If this option is not provided proximity will be computed from non-zero pixel values. Currently pixel values are internally processed as integers.
+# 
+# DISTUNITS=[PIXEL]/GEO
+# 
+# Indicates whether distances will be computed in pixel units or in georeferenced units. The default is pixel units. This also determines the interpretation of MAXDIST.
+# 
+# MAXDIST=n
+# 
+# The maximum distance to search. Proximity distances greater than this value will not be computed. Instead output pixels will be set to a nodata value.
+# 
+# NODATA=n
+# 
+# The NODATA value to use on the output band for pixels that are beyond MAXDIST. If not provided, the hProximityBand will be queried for a nodata value. If one is not found, 65535 will be used.
+# 
+# USE_INPUT_NODATA=YES/NO
+# 
+# If this option is set, the input data set no-data value will be respected. Leaving no data pixels in the input as no data pixels in the proximity output.
+# 
+# FIXED_BUF_VAL=n
+# 
+# If this option is set, all pixels within the MAXDIST threadhold are set to this fixed value instead of to a proximity distance.
+
+def compute_proximity(gridA, srcA, maxdist, src_nd=None):
+    """
+    srcA:
+        integer array in gridA.  (Use .astype(int) to convert from a bool array)
+        !=0: target cells ("ocean")
+        0: non-target cells ("land")
+    srcA_nd:
+        Nodata value for srcA, if any nodata cells exist.
+    """
+
+    # Options for the ComputeProxmity() call
+    # https://svn.osgeo.org/gdal/trunk/gdal/swig/python/scripts/gdal_proximity.py
+    # https://gdal.org/api/gdal_alg.html#_CPPv420GDALComputeProximity15GDALRasterBandH15GDALRasterBandHPPc16GDALProgressFuncPv
+    options = ['DISTUNITS=GEO', f'MAXDIST={maxdist}', f'NODATA={maxdist}']
+
+    # Construct an in-memory dataset for the input grid info
+    srcA_ds = gdal_array.OpenArray(srcA)    # returns None on error
+    if src_nd is None:
+        set_grid_info(srcA_ds, gridA)
+    else:
+        set_grid_info(srcA_ds, gridA, srcA_nd)
+        options.append('USE_INPUT_NODATA=YES')
+    srcA_rb = srcA_ds.GetRasterBand(1)
+
+    # Constrcut output dataset
+#    proxA = np.zeros(srcA.shape, dtype='d')
+    proxA = np.zeros(srcA.shape, dtype=np.byte)
+    proxA_ds = gdal_array.OpenArray(proxA)
+    proxA_rb = proxA_ds.GetRasterBand(1)
+    proxA_rb.SetNoDataValue(maxdist)
+
+
+    options.append('FIXED_BUF_VAL=17')
+    gdal.ComputeProximity(srcA_rb, proxA_rb, options, callback=gdal.TermProgress)
+
+    return proxA
