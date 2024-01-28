@@ -96,8 +96,8 @@ class AtomicOverwrite(object):
 class WriteIfDifferent(object):
     """Writes a file, swapping it to overwrite the previous file atomically"""
     def __init__(self, name, mode='w'):
-        self.name = name    # Final Filename
-        self.tmpfile = self.name + '.tmp'
+        self.name = pathlib.Path(name)    # Final Filename
+        self.tmpfile = self.name.parents[0] / (self.name.parts[-1] + '.tmp')
 
     def __enter__(self):
         return self
