@@ -31,3 +31,9 @@ def xy_to_n(xy):
 
     return n
 
+#n0 = np.arange(170)
+#xy1 = [n_to_xy(x) for x in n0]
+#print(xy1)
+#n2 = [xy_to_n(z) for z in xy1]
+#print(n2)
+#assert n2 == list(n0)
