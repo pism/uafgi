@@ -189,7 +189,7 @@ def read(fname, read_shapes=True, wkt=None):
             yield rec
 
 
-def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='loc'):
+def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='loc', add_prefix=None):
     """
     wkt:
         Project shapes into this projection(if they are being read).
