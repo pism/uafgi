@@ -399,9 +399,13 @@ def scale_bar(ax, location, length, metres_per_unit=1000, unit_name='km',
 # ========================================================================
 # https://nbviewer.org/github/pp-mo/iris_example_code/blob/cartopy_scalebar/map_scalebar.ipynb
 
+_at_y_trans = {
+    'top': (0.89, 0.915),
+    'bottom': (0.08, 0.105)
+}
 
-
-def add_osgb_scalebar(ax, at_x=(0.1, 0.4), at_y=(0.05, 0.075), max_stripes=5, text_color='black'):
+#def add_osgb_scalebar(ax, at_x=(0.1, 0.4), at_y=(0.06, 0.075), max_stripes=5, text_color='black'):
+def add_osgb_scalebar(ax, at_x=(0.1, 0.35), at_y='bottom', max_stripes=5, text_color='black'):
     """
     Add a scalebar to a GeoAxes of type cartopy.crs.OSGB (only).
     NOTE: Coordinates in ax must be in METERS
@@ -414,6 +418,9 @@ def add_osgb_scalebar(ax, at_x=(0.1, 0.4), at_y=(0.05, 0.075), max_stripes=5, te
     * max_stripes
         typical/maximum number of black+white regions
     """
+
+    at_y = _at_y_trans.get(at_y, at_y)
+
     # ensure axis is an OSGB map (meaning coords are just metres)
 #    assert isinstance(ax.projection, cartopy.crs.OSGB)
     # fetch axes coordinate mins+maxes
@@ -454,7 +461,7 @@ def add_osgb_scalebar(ax, at_x=(0.1, 0.4), at_y=(0.05, 0.075), max_stripes=5, te
     plt.text(
         0.5 * (xl0 + xl1),
         yl1 + y_margin,
-        'Km',
+        'km',
         color=text_color,
         verticalalignment='bottom',
         horizontalalignment='center',
