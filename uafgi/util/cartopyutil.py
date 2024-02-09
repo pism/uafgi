@@ -6,6 +6,7 @@ import cartopy.crs
 import cartopy.geodesic
 import matplotlib.pyplot as plt
 import matplotlib.font_manager
+from uafgi.util import gdalutil
 
 def _ellipse_boundary(semimajor=2, semiminor=1, easting=0, northing=0, n=201):
     """
@@ -19,6 +20,10 @@ def _ellipse_boundary(semimajor=2, semiminor=1, easting=0, northing=0, n=201):
     coords = np.vstack([semimajor * np.cos(t), semiminor * np.sin(t)])
     coords += ([easting], [northing])
     return coords
+
+# --------------------------------------------------------
+# These classes are copied from cartopy/crs.py, then modified to take
+# inputs from proj4_dict.
 
 
 class Stereographic(cartopy.crs.Projection):
@@ -63,6 +68,77 @@ class Stereographic(cartopy.crs.Projection):
     def y_limits(self):
         return self._y_limits
 
+class AlbersEqualArea(cartopy.crs.Projection):
+    """
+    An Albers Equal Area projection
+
+    This projection is conic and equal-area, and is commonly used for maps of
+    the conterminous United States.
+
+    """
+
+    def __init__(self, proj4_dict, globe=None):
+
+        """
+        Parameters
+        ----------
+        central_longitude: optional
+            The central longitude. Defaults to 0.
+        central_latitude: optional
+            The central latitude. Defaults to 0.
+        false_easting: optional
+            X offset from planar origin in metres. Defaults to 0.
+        false_northing: optional
+            Y offset from planar origin in metres. Defaults to 0.
+        standard_parallels: optional
+            The one or two latitudes of correct scale. Defaults to (20, 50).
+        globe: optional
+            A :class:`cartopy.crs.Globe`. If omitted, a default globe is
+            created.
+
+        """
+        super().__init__(list(proj4_dict.items()), globe=globe)
+
+        central_longitude = proj4_dict['lon_0']
+
+        # bounds
+        minlon, maxlon = self._determine_longitude_bounds(central_longitude)
+        n = 103
+        lons = np.empty(2 * n + 1)
+        lats = np.empty(2 * n + 1)
+        tmp = np.linspace(minlon, maxlon, n)
+        lons[:n] = tmp
+        lats[:n] = 90
+        lons[n:-1] = tmp[::-1]
+        lats[n:-1] = -90
+        lons[-1] = lons[0]
+        lats[-1] = lats[0]
+
+        points = self.transform_points(self.as_geodetic(), lons, lats)
+
+        self._boundary = shapely.geometry.LinearRing(points)
+        mins = np.min(points, axis=0)
+        maxs = np.max(points, axis=0)
+        self._x_limits = mins[0], maxs[0]
+        self._y_limits = mins[1], maxs[1]
+
+        self.threshold = 1e5
+
+    @property
+    def boundary(self):
+        return self._boundary
+
+    @property
+    def x_limits(self):
+        return self._x_limits
+
+    @property
+    def y_limits(self):
+        return self._y_limits
+
+
+
+
 #
 #class _RectangularProjection(cartopy.crs.Projection):
 #    """
@@ -95,6 +171,7 @@ class Stereographic(cartopy.crs.Projection):
 
 _cartopy_proj_classes = {
     'stere': Stereographic,
+    'aea': AlbersEqualArea,
 }
 
 # PROJ params to be used to  construct the Globe;
@@ -394,6 +471,17 @@ def add_osgb_scalebar(ax, at_x=(0.1, 0.4), at_y=(0.05, 0.075), max_stripes=5, te
                  horizontalalignment='center',
                  fontproperties=font_props)
 
+
+# --------------------------------------------------------------------
+def _xy_extents(geotransform, nx, ny):
+    """Compute Cartopy map extents from input geotransform"""
+    x0 = geotransform[0]
+    x1 = x0 + geotransform[1] * nx
+    y0 = geotransform[3]
+    y1 = y0 + geotransform[5] * ny
+    extents = [x0,x1,y0,y1]
+    return extents
+
 MapInfo = collections.namedtuple('MapInfo', ('crs', 'extents'))
 def nc_mapinfo(nc, ncvarname):
     """Setup a map from CF-compliant stuff"""
@@ -414,12 +502,20 @@ def nc_mapinfo(nc, ncvarname):
 
     # Read extents from the NetCDF geotransform
     geotransform = [float(x) for x in ncvar.GeoTransform.split(' ') if x != '']
-    x0 = geotransform[0]
-    x1 = x0 + geotransform[1] * nx
-    y0 = geotransform[3]
-    y1 = y0 + geotransform[5] * ny
-    extents = [x0,x1,y0,y1]
+    extents = _xy_extents(geotransform, nx, ny)
 
     return MapInfo(map_crs, extents)
 #    ax.set_extent(extents=extents, crs=map_crs)
 #    return map_crs
+
+
+def raster_mapinfo(raster_file):
+    """
+    raster_file:
+        Name of a GeoTIFF or other GDAL-readable raster file
+    """
+    raster = gdalutil.read_raster(raster_file, data=False)
+    map_crs = crs(raster.grid.wkt)
+
+    extents = _xy_extents(raster.grid.geotransform, raster.grid.nx, raster.grid.ny)
+    return MapInfo(map_crs, extents)

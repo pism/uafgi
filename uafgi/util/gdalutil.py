@@ -1,10 +1,34 @@
-import json,subprocess,typing
+import json,subprocess,typing,pathlib
 import collections
 import numpy as np
 import netCDF4, cf_units
 from uafgi.util import cfutil,ncutil,gisutil
 from osgeo import osr,gdal,gdal_array
 from osgeo import gdalconst
+
+def file_in_zip(zip_file, arcname):
+
+    """Creates a string that will cause GDAL/OGR to read a raster or
+    vector file out of a zip file.
+    zip_file:
+        Name of the container zip file
+    arcname:
+        Name of the file within the zip container
+    """
+    return '/vsizip/{}/{}'.format(str(zip_file), arcname)
+
+
+def resolve_file(file):
+    """
+    Resolves (zip_file, arcname) to file_in_zip(zip_file, arcname)
+    """
+    if isinstance(file, str) or isinstance(file, pathlib.PurePath):
+        return file
+
+    if file[0].endswith('.zip'):
+        return file_in_zip(*file)
+
+    raise ValueError(f'Cannot resolve filename: {file}')
 
 # -------------------------------------------------------------------
 def positive_rectangle(x0,x1,y0,y1):
@@ -129,9 +153,12 @@ class Raster(typing.NamedTuple):
     nodata: object    # Nodata value
 
 
-def read_raster(raster_file):
+def read_raster(raster_file, data=True):
     """Simple way to read a raster file; and return it as a Numpy Array.
     Assumes single-band raster files (the usual case)
+
+    data:
+        Read the data portion of the raster?
 
     Returns: grid_info, data, nodata_value
         grid_info: gisutil.RasterInfo
@@ -139,6 +166,7 @@ def read_raster(raster_file):
         data: np.array
             Data found in the raster file."""
 
+    raster_file = resolve_file(raster_file)
     ds = gdal.Open(str(raster_file))
     grid_info = gisutil.RasterInfo(
         ds.GetProjection(),
@@ -146,8 +174,8 @@ def read_raster(raster_file):
         np.array(ds.GetGeoTransform()))
     band = ds.GetRasterBand(1)
     nodata_value = band.GetNoDataValue()
-    data = band.ReadAsArray()
-    return Raster(grid_info, data, nodata_value)
+    _data = band.ReadAsArray() if data else None
+    return Raster(grid_info, _data, nodata_value)
 
 
 def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', type=gdal.GDT_Float64, options=['COMPRESS=LZW', 'TFW=YES'], metadata=None):

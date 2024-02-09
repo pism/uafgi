@@ -70,13 +70,16 @@ CPTRet = collections.namedtuple('CPTRet', ('cmap', 'vmin', 'vmax'))
 
 _color_modelRE = re.compile('#\s*COLOR_MODEL\s*=\s*(.*)')
 _lineRE = re.compile('\s*([-+0123456789\.]\S*)\s+(\S*)\s+(\S*)\s+(\S*)\s+(\S*)\s+(\S*)\s+(\S*)\s+(\S*)')
-def read_cpt(ifname, reverse=False) :
+def read_cpt(ifname, reverse=False, scale=1.0) :
     """Reads and parses a CPT file.
     
     ifname:
         Name of CPT file to read
     reverse:
         If set, reverse the colors from low-to-high.
+    scale:
+        Multiply each number from vmin-vmax by this.
+        To convert a palette from feet to meters, use scale=.3048
     Returns: CPTRet (cmap, vmin, vmax)
         cmap: matplotlib.colors.LinearSegmentedColormap
             The resulting colormap read from the .cpt file
@@ -105,17 +108,17 @@ def read_cpt(ifname, reverse=False) :
                 match = _lineRE.match(line)
                 if match is not None :
                     for base in [1, 5] :
-                        val = match.group(base)
+                        val = float(match.group(base)) * scale
                         c1 = match.group(base+1)
                         c2 = match.group(base+2)
                         c3 = match.group(base+3)
 #                       print 'base=' + str(base) + ', tuple=',val,c1,c2,c3, use_hsv
                         if use_hsv :
                             rgb = hsv2rgb(int(c1), float(c2), float(c3))
-                            cmap_vals.append(float(val))
+                            cmap_vals.append(val)
                             cmap_rgbs.append(rgb)
                         else :
-                            cmap_vals.append(float(val))
+                            cmap_vals.append(val)
                             cmap_rgbs.append((int(c1), int(c2), int(c3)))
 
     # Assemble into cmapx
