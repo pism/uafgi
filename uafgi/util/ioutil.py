@@ -227,7 +227,7 @@ class TmpDir(object):
 
     @property
     def location(self):
-        return self.tempd
+        return pathlib.Path(self.tempd)
 
     def _handler(self, sig, frame):
         """Called when user does Ctrl-C (SIGINT)"""
@@ -310,7 +310,7 @@ class TmpDir(object):
         handle,path = tempfile.mkstemp(suffix=suffix, prefix=prefix, dir=self.tempd,
             text=self.text_by_mode[mode])
         os.close(handle)
-        return path
+        return pathlib.Path(path)
 
 
     def opath(self, ipath, suffix, replace=None):

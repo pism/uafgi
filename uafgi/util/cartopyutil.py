@@ -405,7 +405,7 @@ _at_y_trans = {
 }
 
 #def add_osgb_scalebar(ax, at_x=(0.1, 0.4), at_y=(0.06, 0.075), max_stripes=5, text_color='black'):
-def add_osgb_scalebar(ax, at_x=(0.1, 0.35), at_y='bottom', max_stripes=5, text_color='black'):
+def add_osgb_scalebar(ax, at_x=(0.1, 0.35), at_y='bottom', max_stripes=5, text_color='black', alpha=0.3):
     """
     Add a scalebar to a GeoAxes of type cartopy.crs.OSGB (only).
     NOTE: Coordinates in ax must be in METERS
@@ -444,12 +444,13 @@ def add_osgb_scalebar(ax, at_x=(0.1, 0.35), at_y='bottom', max_stripes=5, text_c
     fill_colors = ['black', 'white']
     i_color = 0
     for xi0, xi1 in zip(x_vals[:-1],x_vals[1:]):
-        # fill region
-        plt.fill((xi0, xi1, xi1, xi0, xi0), (yl0, yl0, yl1, yl1, yl0),
-                 fill_colors[i_color])
+        # fill region (but don't fill any white)
+        if i_color == 0:
+            plt.fill((xi0, xi1, xi1, xi0, xi0), (yl0, yl0, yl1, yl1, yl0),
+                 fill_colors[i_color], alpha=alpha)
         # draw boundary
         plt.plot((xi0, xi1, xi1, xi0, xi0), (yl0, yl0, yl1, yl1, yl0),
-                 'black')
+                 'black', alpha=.8)
         i_color = 1 - i_color
 
     # add short tick lines

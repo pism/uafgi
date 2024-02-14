@@ -25,7 +25,7 @@ def resolve_file(file):
     if isinstance(file, str) or isinstance(file, pathlib.PurePath):
         return file
 
-    if file[0].endswith('.zip'):
+    if file[0].parts[-1].endswith('.zip'):
         return file_in_zip(*file)
 
     raise ValueError(f'Cannot resolve filename: {file}')
