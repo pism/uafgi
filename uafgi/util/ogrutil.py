@@ -93,3 +93,8 @@ def to_shapely_polygon(feature, osr_transform):
     return poly
 
 
+def to_srs(wkt):
+    """Creates an OGR SRS object from a WKT string"""
+    srs = ogr.osr.SpatialReference()
+    srs.ImportFromWkt(wkt)
+    return srs

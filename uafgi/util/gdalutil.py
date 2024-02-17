@@ -177,6 +177,14 @@ def read_raster(raster_file, data=True):
     _data = band.ReadAsArray() if data else None
     return Raster(grid_info, _data, nodata_value)
 
+def raster_ds(raster):
+    """Constructs an in-memory dataset from an in-memory array"""
+    grid_info, data, nodata_value = raster
+
+    ds = gdal_array.OpenArray(data)    # returns None on error
+    set_grid_info(ds, grid_info, nodata_value)    # nodata_value must be of appropriate type
+    return ds
+
 
 def write_raster(raster_file, grid_info, data, nodata_value, driver='GTiff', type=gdal.GDT_Float64, options=['COMPRESS=LZW', 'TFW=YES'], metadata=None):
     """
