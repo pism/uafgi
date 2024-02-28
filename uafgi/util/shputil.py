@@ -236,6 +236,7 @@ def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='shape'):
     """
 
     df = pd.DataFrame(read(fname, wkt=wkt, read_shapes=read_shapes))
+    print('xxxxxxxx ', df)
 #    df = df.reset_index().rename(columns={'index':'fid'})    # Add a key column
 
     drops = list()
