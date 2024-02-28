@@ -4,7 +4,7 @@ import pyproj
 import subprocess
 import pathlib
 import pandas as pd
-from uafgi.util import shputil
+#from uafgi.util import shputil
 from osgeo import ogr,gdal
 import shapefile
 import shapely.geometry
@@ -236,7 +236,7 @@ def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='shape'):
     """
 
     df = pd.DataFrame(read(fname, wkt=wkt, read_shapes=read_shapes))
-    print('xxxxxxxx ', df)
+#    print('xxxxxxxx ', df)
 #    df = df.reset_index().rename(columns={'index':'fid'})    # Add a key column
 
     drops = list()
@@ -525,7 +525,7 @@ def write_df(df, shape_col, shapely_type, ofname, wkt=None, zip_format=False):
         field_defs.append((cname, ogrtype))
 
     # print('field_defs ',field_defs)
-    with shputil.ShapefileWriter(ofname, shapely_type, field_defs, wkt=wkt, zip_format=zip_format) as writer:
+    with ShapefileWriter(ofname, shapely_type, field_defs, wkt=wkt, zip_format=zip_format) as writer:
         for (_,shaperow), (_,row) in zip(shape_series.iterrows(), df1.iterrows()):
             shape = shaperow[shape_col]
 #            print('row = ', [(k,v,type(v)) for k,v in row.items()])
