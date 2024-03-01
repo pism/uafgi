@@ -1,5 +1,9 @@
+import typing
 from osgeo import ogr,osr
-import shapely
+from uafgi.util import osrutil
+import shapely        # Deprecated
+import pandas as pd
+import numpy as np
 
 #def open(fname, driver=None, **kwargs):
 #    """Opens a GDAL datasource.  Raises exception if not found."""
@@ -98,3 +102,121 @@ def to_srs(wkt):
     srs = ogr.osr.SpatialReference()
     srs.ImportFromWkt(wkt)
     return srs
+# ================= MOST EVERYTHING ABOVE THIS LINE IS OBSOLETE =====================
+# --------------------------------------------------------------------
+class Shapefile(typing.NamedTuple):
+    df: pd.DataFrame    # Data from the shapefile (including shape col, if present)
+    wkt: str    # Projection for the shapefile
+    field_types: dict    # {name: ogr.FieldDefn, ...}
+    shape_col: str     # Name of shape column
+    shape_type: int     # ogr.wkb* constants; try ogr.GeometryTypeToName(lyr_def.GetGeomType())
+
+def read_df(fname, shape_col='shape'):
+    """shape_col:
+        Name to call the column containing the actual ogr.Geometry
+        (None if you only want to read the metadata)
+    """
+    ds = ogr.Open(fname)
+    layer = ds.GetLayer(0)
+
+    srs = layer.GetSpatialRef()
+    wkt = srs.ExportToWkt()
+
+    # Identify the attribute names and field definitions (includes type)
+    # https://gdal.org/doxygen/classOGRFieldDefn.html
+    defn = layer.GetLayerDefn()
+    field_types = dict()
+    for i in range(defn.GetFieldCount()):
+        name = defn.GetFieldDefn(i).GetName()
+        field_types[name] = defn.GetFieldDefn(i).GetType()
+
+    shape_type = layer.GetGeomType() if shape_col is not None else None
+
+    # Read the data
+    rows = list()
+    for feature in layer:
+        row = [feature.GetField(i) for i in range(len(field_types))]
+        if shape_col is not None:
+            row.append(feature.GetGeometryRef().Clone())
+        rows.append(row)
+
+    df = pd.DataFrame(rows, columns=list(field_types.keys()) + [shape_col])
+
+    return Shapefile(df, wkt, field_types, shape_col, shape_type)
+# -----------------------------------------------------
+dtype2ogr = {
+    np.dtype('int64'): ogr.OFTInteger64,
+    np.dtype('int32'): ogr.OFTInteger,
+    np.dtype('float64'):  ogr.OFTReal,
+    np.dtype('float32'):  ogr.OFTReal,
+    pd.StringDtype():   ogr.OFTString,
+}
+
+def field_types(df, field_types=dict()):
+    """Determine type of each field from columns of dataframe.
+    Returns: {name: ogr.FieldDefn, ...}
+    """
+
+    # Build a new field_types dict, in case we missed some
+    if field_types is None:
+        field_types = {}    # Dummy lookup
+
+    fts = list()
+    for cname in df.columns:
+        if cname in field_types:
+            # Use field type we already have
+            fts.append((cname, field_types[cname]))
+        else:
+            dtype = df[cname].dtype
+            try:
+                ogrtype = dtype2ogr[dtype]
+            except KeyError:
+                print(f'Error on column {cname}')
+                raise
+            fts.append((cname, ogrtype))
+    return dict(fts)
+# -----------------------------------------------------
+def write_df(sf, ofname):
+    """sf: Shapefile
+        Same type as output of read_df()
+    """
+
+    # Split the shape column into a separate dataframe
+    shape_series = sf.df[[sf.shape_col]]
+    df1 = sf.df.drop(sf.shape_col, axis=1)
+
+    # Determine field definitions (fill in any missing definitions from dataframe)
+    xfield_types = field_types(df1, sf.field_types)
+#    field_types = sf.field_types if sf.field_types is not None else field_types(sf.df)
+
+    # Open the shapefile
+    ds = ogr.GetDriverByName('Esri Shapefile').CreateDataSource(str(ofname))
+    layer = ds.CreateLayer('', osrutil.wkt_to_srs(sf.wkt), sf.shape_type)
+
+    # Add attributes
+    for name,ftype in xfield_types.items():
+        print('xxx ', name, ftype)
+        layer.CreateField(ogr.FieldDefn(name, ftype))
+
+    # --------------------------------
+    defn = layer.GetLayerDefn()
+    for (_,shaperow), (_,row) in zip(shape_series.iterrows(), df1.iterrows()):
+        feat = ogr.Feature(defn)
+        feat.SetGeometry(shaperow[sf.shape_col])
+        for field,value in zip(xfield_types.keys(), row):
+#        for field,value in fields.items():
+            feat.SetField(field, value)
+        layer.CreateFeature(feat)
+
+    # https://gdal.org/doxygen/classOGRGeometry.html
+    # --------------------------------
+
+
+    # Free memory with OGR
+#    layer = None
+#    ds = None
+
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
+#https://pcjericks.github.io/py-gdalogr-cookbook/vector_layers.html#create-a-new-shapefile-and-add-data
