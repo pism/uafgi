@@ -39,8 +39,9 @@ class RootsDict:
             Roots as absolute paths, native to the system they're intended to be used on.
         """
         for key,path in roots_iter:
+            path = self.Path(path).resolve()
             print(f'root[{key}] = {path}')
-            self.lookup[key] = self.PureSysPath(path).resolve()
+            self.lookup[key] = self.PureSysPath(path)
         self.sorted = [(len(str(val)),key) for key,val in self.lookup.items()]
         self.sorted.sort(reverse=True)
 
