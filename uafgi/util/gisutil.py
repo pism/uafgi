@@ -2,7 +2,7 @@ import functools,math
 import numpy as np
 from osgeo import osr
 import shapely
-from uafgi.util import shputil
+from uafgi.util import shputil,ogrutil
 
 # Simple Cartesian CRS ("Ortographic")
 def _ortho_wkt():
@@ -215,7 +215,7 @@ class RasterInfo:
 
 
     @property
-    def bounding_box(self):
+    def bounding_box(self, type='shapely'):
         """Returns: Shapely rectangle of the bounding box of this grid."""
 
         GT = self.geotransform
@@ -230,7 +230,12 @@ class RasterInfo:
             (x1,y1),
             (x0,y1),
             (x0,y0)]
-        return shapely.geometry.Polygon(coords)
+        if type == 'ogr':
+            return ogrutil.polygon(coords)
+        elif type == 'shapely':
+            return shapely.geometry.Polygon(coords)
+        else:
+            raise ValueError(f'Unknown shape type {type}')
 
 
 class DomainGrid(RasterInfo):    # (gridD)
@@ -355,7 +360,7 @@ class DomainGrid(RasterInfo):    # (gridD)
 
 
     def sub(self, i, j, resx, resy, margin=True):
-        """Produes a sub-grid for the (i,j) domain (north-up)
+        """Produes a sudeb-grid for the (i,j) domain (north-up)
         resx,resy:
             Resolution of the subgrid
             (Both positive numbers; will be adjusted based on self.dx / self.dy)

@@ -112,7 +112,12 @@ class Shapefile(typing.NamedTuple):
     shape_type: int     # ogr.wkb* constants; try ogr.GeometryTypeToName(lyr_def.GetGeomType())
 
 def read_df(fname, shape_col='shape'):
-    """shape_col:
+    """Reads a dataframe from a shapefile (or similar type of vector file)
+
+    fname:
+        Name of file to read.
+        (Can be used to read from zip file)
+    shape_col:
         Name to call the column containing the actual ogr.Geometry
         (None if you only want to read the metadata)
     """
@@ -137,12 +142,26 @@ def read_df(fname, shape_col='shape'):
     for feature in layer:
         row = [feature.GetField(i) for i in range(len(field_types))]
         if shape_col is not None:
-            row.append(feature.GetGeometryRef().Clone())
+            geometry_ref = feature.GetGeometryRef()
+#            print('type geometry_ref ', type(geometry_ref))
+            row.append(geometry_ref.Clone())
         rows.append(row)
 
     df = pd.DataFrame(rows, columns=list(field_types.keys()) + [shape_col])
 
     return Shapefile(df, wkt, field_types, shape_col, shape_type)
+# -----------------------------------------------------
+def polygon(coords):
+    """Creates an OGR Polygon
+    coords: [(x,y), ...]"""
+    # https://pcjericks.github.io/py-gdalogr-cookbook/geometry.html#create-a-polygon
+    ring = ogr.Geometry(ogr.wkbLinearRing)
+    for point in coords:
+        ring.AddPoint(*point)
+    poly = ogr.Geometry(ogr.wkbPolygon)
+    poly.AddGeometry(ring)
+    return poly
+
 # -----------------------------------------------------
 dtype2ogr = {
     np.dtype('int64'): ogr.OFTInteger64,
