@@ -40,7 +40,7 @@ class RootsDict:
         """
         for key,path in roots_iter:
             print(f'root[{key}] = {path}')
-            self.lookup[key] = self.PureSysPath(path)
+            self.lookup[key] = self.PureSysPath(path).resolve()
         self.sorted = [(len(str(val)),key) for key,val in self.lookup.items()]
         self.sorted.sort(reverse=True)
 
