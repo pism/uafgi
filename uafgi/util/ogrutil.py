@@ -159,7 +159,9 @@ def polygon(coords):
     for point in coords:
         ring.AddPoint(*point)
     poly = ogr.Geometry(ogr.wkbPolygon)
+    #poly.Set3D(False)
     poly.AddGeometry(ring)
+    poly.FlattenTo2D()
     return poly
 
 # -----------------------------------------------------

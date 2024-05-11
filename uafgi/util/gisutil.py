@@ -214,7 +214,6 @@ class RasterInfo:
         return np.floor(ir).astype('i'), np.floor(jr).astype('i')
 
 
-    @property
     def bounding_box(self, type='shapely'):
         """Returns: Shapely rectangle of the bounding box of this grid."""
 
