@@ -235,6 +235,7 @@ def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='shape'):
             File ID, the ID used to read this record back with a ShapeFile reader
     """
 
+#    print(fname)
     df = pd.DataFrame(read(fname, wkt=wkt, read_shapes=read_shapes))
 #    print('xxxxxxxx ', df)
 #    df = df.reset_index().rename(columns={'index':'fid'})    # Add a key column
@@ -253,6 +254,8 @@ def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='shape'):
             drops.append('_shape')
         else:
             renames['_shape'] = shape
+#    print('fffffffff1')
+#    print(df.columns)
 
     df = df.drop(drops, axis=1).rename(columns=renames)
     return df
