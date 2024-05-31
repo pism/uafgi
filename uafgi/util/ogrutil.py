@@ -111,16 +111,17 @@ class Shapefile(typing.NamedTuple):
     shape_col: str     # Name of shape column
     shape_type: int     # ogr.wkb* constants; try ogr.GeometryTypeToName(lyr_def.GetGeomType())
 
-def read_df(fname, shape_col='shape'):
+def read_df(fname, shape='shape'):
     """Reads a dataframe from a shapefile (or similar type of vector file)
 
     fname:
         Name of file to read.
         (Can be used to read from zip file)
-    shape_col:
+    shape:
         Name to call the column containing the actual ogr.Geometry
         (None if you only want to read the metadata)
     """
+    shape_col = shape
     ds = ogr.Open(fname)
     layer = ds.GetLayer(0)
 
