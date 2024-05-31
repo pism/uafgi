@@ -161,7 +161,7 @@ class WriteIfDifferent(object):
 
 
 
-def needs_regen(ofiles, ifiles):
+def needs_regen(ofiles, ifiles, check_timestamps=True):
     """Determines if any of the ofiles are older than any of the ifiles.
     This is used, eg in make, to determine if a ruile needs to be run."""
 
@@ -169,6 +169,11 @@ def needs_regen(ofiles, ifiles):
         otimes = [os.path.getmtime(x) for x in ofiles]
     except FileNotFoundError:
         return True
+
+    # If we're not checking timestamps, then we're OK as long as all
+    # the files are there.
+    if not check_timestamps:
+        return False
 
     # It's an error if the input files don't all exist.
     itimes = [os.path.getmtime(x) for x in ifiles]
