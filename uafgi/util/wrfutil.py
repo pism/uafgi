@@ -54,7 +54,7 @@ grs1980_wkt = epsg4019_wkt = \
     AUTHORITY["EPSG","4019"]]"""
 
 
-def wrf_info(geo_fname):
+def wrf_info(geo_fname, wgs84=False):
     """
     geo_fname:
         Name of the WRF geometry definition file (eg: geosoutheast.nc)
@@ -76,7 +76,17 @@ def wrf_info(geo_fname):
         MAP_PROJ = nc.MAP_PROJ
         if MAP_PROJ != 1:
             raise ValueError('WRF MAP_PROJ={} must be 1 (Lambert Concical LCC projection in PROJ.4).  Other values of MAP_PROJ are not supported'.format(MAP_PROJ))
-        wrf_crs = pyproj.CRS.from_string(f'+proj=lcc +lat_1={nc.TRUELAT1} +lat_2={nc.TRUELAT2} +lat_0={nc.CEN_LAT} +lon_0={nc.CEN_LON} +x_0=0 +y_0=0 +a=6370000 +b=6370000 +units=m +no_defs')
+
+        if wgs84:
+            # WRF actually uses the sphere below; but let's put it on the
+            # same ellipsoid as everyone else for plotting.
+            wrf_projstr = f'+proj=lcc +lat_1={nc.TRUELAT1} +lat_2={nc.TRUELAT2} +lat_0={nc.CEN_LAT} +lon_0={nc.CEN_LON} +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs'
+        else:
+            wrf_projstr = f'+proj=lcc +lat_1={nc.TRUELAT1} +lat_2={nc.TRUELAT2} +lat_0={nc.CEN_LAT} +lon_0={nc.CEN_LON} +x_0=0 +y_0=0 +a=6370000 +b=6370000 +units=m +no_defs'
+
+
+        print('wrf_projstr ', wrf_projstr)
+        wrf_crs = pyproj.CRS.from_string(wrf_projstr)
 
 
     # Convert Gridcell centers from lon/lat to WRF's CRS
