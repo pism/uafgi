@@ -302,7 +302,7 @@ _GLOBE_PARAMS = {'datum': 'datum',
                  'b': 'semiminor_axis',
                  'f': 'flattening',
                  'rf': 'inverse_flattening',
-#                 'towgs84': 'towgs84',
+                 'towgs84': 'towgs84',    # Datum transformation to WGS84
                  'nadgrids': 'nadgrids'}
 
 
@@ -317,7 +317,7 @@ def crs(projparams):
     ppcrs = pyproj.crs.CRS(projparams)
     ppdict = ppcrs.to_dict()
     print('crs ppdict: ', ppdict)
-    ppdict['towgs84'] = '500000,0,0,0,0,0,1000000'
+#    ppdict['towgs84'] = '500000,0,0,0,0,0,1000000'    # DEBUGGING
 
     # Split and translate PyProj parameters
     globe_params = dict()
