@@ -254,16 +254,9 @@ def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='shape'):
             drops.append('_shape')
         else:
             renames['_shape'] = shape
-#    print('fffffffff1')
-#    print(df.columns)
 
     df = df.drop(drops, axis=1).rename(columns=renames)
     return df
-#    up = pdutil.ext_df(df, wkt, add_prefix=add_prefix,
-#        units={},
-#        keycols=['fid'])
-
-#    return up
 
 # ---------------------------------------------------------
 # Here's an example of reading a shapefile using ogr
