@@ -313,11 +313,11 @@ def crs(projparams):
         See: https://pyproj4.github.io/pyproj/dev/api/crs/crs.html
     """
 
-    print('crs projparams: ', projparams, type(projparams))
+#    print('crs projparams: ', projparams, type(projparams))
     ppcrs = pyproj.crs.CRS(projparams)
     ppdict = ppcrs.to_dict()
-    print('crs ppdict: ', ppdict)
-#    ppdict['towgs84'] = '500000,0,0,0,0,0,1000000'    # DEBUGGING
+#    print('crs ppdict: ', ppdict)
+##    ppdict['towgs84'] = '500000,0,0,0,0,0,1000000'    # DEBUGGING: This changes things!!!
 
     # Split and translate PyProj parameters
     globe_params = dict()
@@ -329,8 +329,8 @@ def crs(projparams):
             other_params[ppkey] = val
 
     # Construct Cartopy CRS from the PyProj key/value pairs
-    print('globe_params ', globe_params)
-    print('other_params ', other_params)
+#    print('globe_params ', globe_params)
+#    print('other_params ', other_params)
 
     globe = cartopy.crs.Globe(**globe_params)
     try:
@@ -338,7 +338,7 @@ def crs(projparams):
     except:
         raise NotImplementedError("Cartopy Projection subclass for PROJ type '{}' not yet implemented.".format(ppdict['proj'])) from None
 
-#    other_params['towgs84'] = [500000,0,0,0,0,0,1000000]
+#    other_params['towgs84'] = [500000,0,0,0,0,0,1000000]    # This does not change things
     cartopy_crs = cartopy_klass(other_params, globe=globe)
     return cartopy_crs
 
