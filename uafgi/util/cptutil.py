@@ -1,4 +1,5 @@
 import collections,re
+import numpy as np
 import matplotlib
 
 def hsv2rgb(h, s, v):
@@ -156,4 +157,19 @@ def read_cpt(ifname, reverse=False, scale=1.0) :
     cmap =  matplotlib.colors.LinearSegmentedColormap('my_colormap', cdict, 1024)
 
     return CPTRet(cmap, vmin, vmax)
+
+# ----------------------------------------
+# By Jake VanderPlas
+# License: BSD-style
+def discrete_cmap(N, base_cmap=None):
+    """Create an N-bin discrete colormap from the specified input map"""
+
+    # Note that if base_cmap is a string or None, you can simply do
+    #    return plt.cm.get_cmap(base_cmap, N)
+    # The following works for string, None, or a colormap instance:
+
+    base = matplotlib.pyplot.cm.get_cmap(base_cmap)
+    color_list = base(np.linspace(0, 1, N))
+    cmap_name = base.name + str(N)
+    return base.from_list(cmap_name, color_list, N)
 

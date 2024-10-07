@@ -424,6 +424,14 @@ class DomainGrid(RasterInfo):    # (gridD)
         return RasterInfo(self.wkt, nx, ny, np.array([x0, dx, 0, y0, 0, dy]))
 
 
+def xxyy_to_poly(x0,x1,y0,y1):
+    return shapely.geometry.Polygon([
+            (x0,y0),
+            (x1,y0),
+            (x1,y1),
+            (x0,y1),
+            (x0,y0)])
+
 
 # ====================================================
 # From PISM

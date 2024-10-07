@@ -681,5 +681,45 @@ def plot_hillshade(ax, dem_data, extent=None, transform=None, cmap='Greys', **kw
         * np.cos((azimuth - np.pi/2.) - aspect)
     return plt.imshow(shaded, extent=extent, transform=transform,
         cmap=cmap, **kwargs)
+# -----------------------------------------------------------------
+def poly_clip_path(ax, mpoly):
+    """
+    originfig:
+        The plot element to be clipped.
+        Eg:
+            cf = ax.contourf(t2.lon, t2.lat, t2, extend = 'both',  transform = proj)
+            clip_drawing(cf, ax, mpl)
+    ax:
+        Standard Cartopy axes, eg:
+            fig = plt.figure(figsize=(6,6)) 
+            ax = fig.subplots(1, 1, subplot_kw={'projection': proj})  
 
+    mpoly: shapely.*.MultiPolygon
+        Clip to this shape
+    """
+    vertices = []
+    codes = []
 
+    if isinstance(mpoly, shapely.geometry.polygon.Polygon):
+        polys = (mpoly,)
+    elif isinstance(mpoly, shapely.geometry.multipolygon,MultiPolygon):
+        polys = list(mpoly.geoms)
+    else:
+        raise TypeError('clip_to_poly needs a Polygon or MultiPolygon')
+
+    for poly in polys:
+        xys = poly.exterior.coords
+        vertices += list(xys)    # [(x,y), ...]
+        codes += [matplotlib.patches.Path.MOVETO]
+        codes += [matplotlib.patches.Path.LINETO]*(len(xys)-2)
+        codes += [matplotlib.patches.Path.CLOSEPOLY]
+    clip = matplotlib.patches.Path(vertices, codes)
+    clip = matplotlib.patches.PathPatch(clip, transform=ax.transData)
+
+    return clip
+
+#    originfig.set_clip_path(clip)
+#
+##    for contour in originfig.collections:
+##        contour.set_clip_path(clip)
+#    return clip
