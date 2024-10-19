@@ -47,7 +47,7 @@ def rasterize_polygons(polygon_ds, grid_info):
     mask_arr = dst_ds.GetRasterBand(1).ReadAsArray()
     return mask_arr
 
-def rasterize_polygon_compressed(poly, grid_info, debug=False):
+def rasterize_polygon_ij(poly, grid_info, debug=False):
     """Burns a polygon into a raster and returns a list of the
     gridcells that intersect with the interior of the polygon.
 
@@ -159,14 +159,29 @@ def rasterize_polygon_compressed(poly, grid_info, debug=False):
     jarr1 = jarr1.astype('i')
     iarr1 = iarr1.astype('i')
 
-    #if debug:
-        #print('iarr0 ', iarr0)
-        #print('iarr1 ', iarr1 + origin_i)
-        #print('jarr0 ', jarr0)
-        #print('jarr1 ', jarr1 + origin_j)
 
+    # Clip to bounds of the output grid
+#    mask_out = np.logical_or(np.logical_or(np.logical_or(
+#        iarr1 < 0, iarr1 >= grid_info.nx),
+#        jarr1 < 0), jarr1 >= grid_info.ny)
 
-    pra1_burn = (jarr1+origin_j) * grid_info.nx + (iarr1 + origin_i)
+    # Move to origin of lage coordinate system
+    iarr1 += origin_i
+    jarr1 += origin_j
+
+    return iarr1, jarr1
+
+def rasterize_polygon_compressed(poly, grid_info, debug=False):
+    """Legacy function returns 1D indices"""
+
+    iarr1,jarr1 = rasterize_polygon_ij(poly, grid_info, debug=debug)
+    mask_in = np.logical_and(np.logical_and(np.logical_and(
+        iarr1 >= 0, iarr1 < grid_info.nx),
+        jarr1 >= 0), jarr1 < grid_info.ny)
+    iarr1 = iarr1[mask_in]
+    jarr1 = jarr1[mask_in]
+
+    pra1_burn = jarr1 * grid_info.nx + iarr1
     if debug:
         print('pra0_burn_a ', pra0_burn_a)
         print('pra1_burn ', pra1_burn)

@@ -359,7 +359,7 @@ class DomainGrid(RasterInfo):    # (gridD)
 
 
     def sub(self, i, j, resx, resy, margin=True):
-        """Produes a sudeb-grid for the (i,j) domain (north-up)
+        """Produes a sub-grid for the (i,j) domain (north-up)
         resx,resy:
             Resolution of the subgrid
             (Both positive numbers; will be adjusted based on self.dx / self.dy)
@@ -416,7 +416,7 @@ class DomainGrid(RasterInfo):    # (gridD)
         """
 
         GT = self.geotransform
-        x0 = GT[0]
+            x0 = GT[0]
         y0 = GT[3]
         nx = self.nx * (self.dx / dx)
         ny = self.ny * (self.dy / dy)
@@ -432,6 +432,17 @@ def xxyy_to_poly(x0,x1,y0,y1):
             (x0,y1),
             (x0,y0)])
 
+
+def offset_diff(igrid, ogrid):
+    """Determines offset that must be added to index arrays to convert from igrid to ogrid.
+    Returns: ioff, joff
+    """
+    assert igrid.dx == ogrid.dx
+    assert igrid.dy == ogrid.dy
+
+    return \
+        (igrid.x0 - ogrid.x0) / igrid.dx,
+        (igrid.y0 - ogrid.y0) / igrid.dy
 
 # ====================================================
 # From PISM
