@@ -416,7 +416,7 @@ class DomainGrid(RasterInfo):    # (gridD)
         """
 
         GT = self.geotransform
-            x0 = GT[0]
+        x0 = GT[0]
         y0 = GT[3]
         nx = self.nx * (self.dx / dx)
         ny = self.ny * (self.dy / dy)
@@ -440,9 +440,12 @@ def offset_diff(igrid, ogrid):
     assert igrid.dx == ogrid.dx
     assert igrid.dy == ogrid.dy
 
+#    print('igrid geotransform ', igrid.geotransform)
+#    print('ogrid geotransform ', ogrid.geotransform)
+
     return \
-        (igrid.x0 - ogrid.x0) / igrid.dx,
-        (igrid.y0 - ogrid.y0) / igrid.dy
+        int(np.round((igrid.x0 - ogrid.x0) / igrid.dx)), \
+        int(np.round((igrid.y0 - ogrid.y0) / igrid.dy))
 
 # ====================================================
 # From PISM
