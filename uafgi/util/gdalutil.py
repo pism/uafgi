@@ -436,22 +436,29 @@ def set_grid_info(ds, grid_info, nodata_value=None):
     #ds.SetNoDataValue(nodata_value)
 
 # -------------------------------------------------------
-def regrid(idata, igrid_info, inodata_value, ogrid_info, onodata_value, resample_algo=gdalconst.GRA_NearestNeighbour):
+def regrid(idata, igrid_info, inodata_value, ogrid_info, onodata_value, resample_algo=gdalconst.GRA_NearestNeighbour, dtype=None):
     """Regrids a Numpy array from one CRS/etc to another.
     igrid_info: gisutil.RasterInfo
     units: str (OPTIONAL)
         Convert to these units upon read
+    dtype:
+        Type of output numpy array
     Returns: np.array
     """
 
     # Construct an in-memory dataset for the input grid info
     ids = gdal_array.OpenArray(idata)    # returns None on error
     print('Opening of type ', idata.dtype)
+    print('idata ', idata.shape, idata.dtype)
+    print('ids = ', ids)
 #    set_grid_info(ids, igrid_info, idata.dtype.type(inodata_value))
     set_grid_info(ids, igrid_info, np.double(inodata_value))
 
     # Construct an in-memory dataset for the output grid info
-    odata = np.zeros((ogrid_info.ny, ogrid_info.nx))
+    kwargs = dict()
+#    if dtype is not None:
+#        kwargs['dtype'] = dtype
+    odata = np.zeros((ogrid_info.ny, ogrid_info.nx), dtype=idata.dtype)#**kwargs)
     ods = gdal_array.OpenArray(odata)
     ods.GetRasterBand(1).SetNoDataValue(onodata_value)
     ods.GetRasterBand(1).Fill(onodata_value)
