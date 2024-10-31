@@ -1,4 +1,4 @@
-import json,subprocess,typing,pathlib
+import json,subprocess,typing,pathlib,os
 import collections
 import numpy as np
 import netCDF4, cf_units
@@ -23,9 +23,16 @@ def resolve_file(file):
     Resolves (zip_file, arcname) to file_in_zip(zip_file, arcname)
     """
     if isinstance(file, str) or isinstance(file, pathlib.PurePath):
+        if not os.path.isfile(file):
+            raise FileNotFoundError(file)
         return file
 
     if file[0].parts[-1].endswith('.zip'):
+
+        zip_file = file[0]
+        if not os.path.isfile(zip_file):
+            raise FileNotFoundError(zip_file)
+
         return file_in_zip(*file)
 
     raise ValueError(f'Cannot resolve filename: {file}')
@@ -139,6 +146,8 @@ def grid_info(raster_file):
     return grid_info
 
 def read_grid(raster_file):
+    raster_file = resolve_file(raster_file)
+
     ds = gdal.Open(str(raster_file))
     grid_info = gisutil.RasterInfo(
         ds.GetProjection(),
