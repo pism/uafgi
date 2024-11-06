@@ -450,6 +450,22 @@ def regrid(idata, igrid_info, inodata_value, ogrid_info, onodata_value, resample
     igrid_info: gisutil.RasterInfo
     units: str (OPTIONAL)
         Convert to these units upon read
+    resample_algo:
+        Options are
+            gdalconst.GRA_Average
+            gdalconst.GRA_Bilinear
+            gdalconst.GRA_Cubic
+            gdalconst.GRA_CubicSpline
+            gdalconst.GRA_Lanczos
+            gdalconst.GRA_Max
+            gdalconst.GRA_Med
+            gdalconst.GRA_Min
+            gdalconst.GRA_Mode
+            gdalconst.GRA_NearestNeighbour
+            gdalconst.GRA_Q1
+            gdalconst.GRA_Q3
+            gdalconst.GRA_RMS
+            gdalconst.GRA_Sum
     dtype:
         Type of output numpy array
     Returns: np.array
@@ -554,3 +570,50 @@ def compute_proximity(gridA, srcA, maxdist, src_nd=None):
     gdal.ComputeProximity(srcA_rb, proxA_rb, options, callback=gdal.TermProgress)
 
     return proxA
+# ----------------------------------------------------------
+def mem_ds(raster_grid, raster_data, raster_nd):
+    """Creates an in-memory GDAL dataset to read or write"""
+    ds = gdal_array.OpenArray(raster_data)
+    set_grid_info(ds, raster_grid, np.double(raster_nd))
+    return ds
+# ----------------------------------------------------------
+def build_vrt(ifnames, ofname):
+    """Dynamically creates a virtual mosaic .vrt that encompasses the files provided in ifnames.
+    This checks the creation time of ifnames to see if ofname needs regeneration.
+    ifnames:
+        Individual tile rasters to include
+    ofname:
+        Ouptutfile .vrt file to create.
+    """
+
+    ofname = pathlib.Path(ofname)
+    odir = ofname.parents[0]
+
+
+    # Decide whether we need to regenerate the .vrt file
+    if not os.path.exists(ofname):
+        regen = True
+    else:
+        ofname_mtime = os.path.getmtime(ofname)
+        ifname_mtime = max(os.path.getmtime(x) for x in ifnames)
+        regen = (ifname_mtime >= ofname_mtime)
+
+    if not regen:
+        return False
+
+    cmd = ['gdalbuildvrt']
+
+    # No (known) need for -allow_projection_difference in this case.
+    # Tiles use the same projection, but named differently
+    # Error received: expected NAD83 / Alaska Albers, got NAD_1983_CORS96_Alaska_Albers
+    # Eg: ifsar/CELL_391/N5430W13200P/DTM_N5430W13200P.tif
+    # cmd.append('-allow_projection_difference')
+
+    # Include ALL appropriate ifnames in the VRT, not just the
+    # snowfile(s) needed for now.
+    cmd.append(ofname)
+#    cmd += [os.path.relpath(x, odir) for x in sorted(ifnames)]
+    cmd += list(sorted(ifnames))
+    print(f'** Regenerating {ofname}')
+    os.makedirs(odir, exist_ok=True)
+    subprocess.run(cmd, cwd=odir, check=True)
