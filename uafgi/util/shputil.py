@@ -217,12 +217,15 @@ def read(fname, read_shapes=True, wkt=None):
             yield rec
 
 
-def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='shape'):
-    """
-    wkt:
+def read_df_noshapes(fname, read_shapes=False, wkt=None, shape0=None, shape='shape'):
+    """wkt:
         Project shapes into this projection(if they are being read).
     read_shapes:
         Should the acutal shapes be read?  Or just the metadata?
+
+        WARNING: Do not set read_shapes=True, since it is buggy for
+                 Polygons with holes in them.  Use geopandas.read_file()
+                 equivalents instead.
     wkt:
         Projection (CRS) to use, overrides one in shapefile
     shape0:
@@ -233,6 +236,7 @@ def read_df(fname, read_shapes=True, wkt=None, shape0=None, shape='shape'):
     Returns columns:
         fid:
             File ID, the ID used to read this record back with a ShapeFile reader
+
     """
 
 #    print(fname)
@@ -501,7 +505,7 @@ dtype2ogr = {
     np.dtype('float32'):  ogr.OFTReal,
     pd.StringDtype():   ogr.OFTString,
 }
-def write_df(df, shape_col, shapely_type, ofname, wkt=None, zip_format=False):
+def write_df_deprecated(df, shape_col, shapely_type, ofname, wkt=None, zip_format=False):
 
     # Split into two dataframes
     shape_series = df[[shape_col]]
