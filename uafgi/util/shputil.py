@@ -545,3 +545,11 @@ def write_df_deprecated(df, shape_col, shapely_type, ofname, wkt=None, zip_forma
 #            File ID, the ID used to read this record back with a ShapeFile reader
 #    """
 
+
+def shp_to_zip(x_shp, x_zip):
+    """Copies a shapefile into an associated zip archive"""
+    with zipfile.ZipFile(x_zip, 'w') as ozip:
+        for ext in ('.dbf',  '.prj',  '.shp',  '.shx'):
+            ifname = x_shp.with_suffix(ext)
+            arcname = ifname.parts[-1]
+            ozip.write(ifname, arcname=arcname, compress_type=zipfile.ZIP_DEFLATED)
