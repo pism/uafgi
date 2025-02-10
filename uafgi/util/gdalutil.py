@@ -485,8 +485,9 @@ def regrid(idata, igrid_info, inodata_value, ogrid_info, onodata_value, resample
 #        kwargs['dtype'] = dtype
     odata = np.zeros((ogrid_info.ny, ogrid_info.nx), dtype=idata.dtype)#**kwargs)
     ods = gdal_array.OpenArray(odata)
-    ods.GetRasterBand(1).SetNoDataValue(onodata_value)
-    ods.GetRasterBand(1).Fill(onodata_value)
+    if onodata_value is not None:
+        ods.GetRasterBand(1).SetNoDataValue(onodata_value)
+        ods.GetRasterBand(1).Fill(onodata_value)
 #    set_grid_info(ods, ogrid_info, idata.dtype.type(onodata_value))
 #    set_grid_info(ods, ogrid_info, np.double(onodata_value))    # GDAL always wants C/SWIG double
     set_grid_info(ods, ogrid_info)    # GDAL always wants C/SWIG double
