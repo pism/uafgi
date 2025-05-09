@@ -44,7 +44,7 @@ def read_time(nc, vname, units=None, calendar=None, unitvar=None):
         Name of time variable to read
     unitvar: str
         Obtain unit variables from this variable
-    Returns: [datetime, ...]
+    Returns: np.array([datetime, ...])
         The times, converted to Python format.
     """
     # Read units from unitvar, if supplied

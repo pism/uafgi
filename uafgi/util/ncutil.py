@@ -314,7 +314,7 @@ class Schema:
         return sv
 
 
-    def create(self, ncout, var_kwargs=dict(zlib=True)):
+    def create(self, ncout, var_kwargs=None):
         """Creates this schema in a new NetCDF file"""
 
         # Create dimensions
@@ -323,11 +323,20 @@ class Schema:
 
         # Create variables
         for name,nsv in self.vars.items():
+            dtype = nsv.dtype
+
+
+            if var_kwargs is None:
+                kwargs = {} if nsv.dtype == str else {'zlib': True} 
+            else:
+                kwargs = var_kwargs
+
+
             if '_FillValue' in nsv.attrs:
                 ncv = ncout.createVariable(
-                    name, nsv.dtype, nsv.dims, fill_value=nsv.attrs['_FillValue'], **var_kwargs)
+                    name, dtype, nsv.dims, fill_value=nsv.attrs['_FillValue'], **kwargs)
             else:
-                ncv = ncout.createVariable(name, nsv.dtype, nsv.dims, **var_kwargs)
+                ncv = ncout.createVariable(name, nsv.dtype, nsv.dims, **kwargs)
             for key,val in nsv.attrs.items():
                 if key != '_FillValue':
                     ncv.setncattr(key, val)
@@ -374,7 +383,7 @@ class Schema:
 
 # ------------------------------------------------
 class convert_to:
-    """Wrap a NCVar in this, and it will conver to different units."""
+    """Wrap a NCVar in this, and it will convert to different units."""
     def __init__(self, ncvar, sunit, src=None):
         if isinstance(sunit, str):
             self.external_units = cf_units.Unit(sunit)

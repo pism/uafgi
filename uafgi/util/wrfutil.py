@@ -4,6 +4,7 @@ import netCDF4
 from uafgi.util import gisutil
 from osgeo import gdal
 import gridfill
+import wrf    # wrf-python package
 
 # From the gridfill docs...
 #def gridfill.fill(grids, xdim, ydim, eps, relax=.6, itermax=100, initzonal=False,
@@ -72,11 +73,82 @@ def wrf_info(geo_fname):
         #       is the opposite of typical GeoTIFF, and we would
         #       expect dy to be positive.
 
+# Just use wrf-python...
+#https://wrf-python.readthedocs.io/en/develop/user_api/generated/wrf.WrfProj.html#wrf.WrfProj.map_proj
+
+#https://www.ncl.ucar.edu/Applications/wrflc.shtml
+#https://www.ncl.ucar.edu/Applications/wrflc.shtml
+#https://www2.mmm.ucar.edu/wrf/users/wrf_users_guide/build/html/wps.html#wps-namelist-variables
+#https://proj.org/en/stable/operations/projections/ups.html
+#MAP_PROJ = 0 --> "CylindricalEquidistant"
+#MAP_PROJ = 1 --> "LambertConformal"
+#MAP_PROJ = 2 --> "Stereographic"  (Polar Stereographic, or just 'polar')
+#MAP_PROJ = 3 --> "Mercator"
+#MAP_PROJ = 6 --> "Lat/Lon"
+
+
+#// global attributes:
+#                :TITLE = "OUTPUT FROM GEOGRID V4.5" ;
+#                :SIMULATION_START_DATE = "0000-00-00_00:00:00" ;
+#                :WEST-EAST_GRID_DIMENSION = 421 ;
+#                :SOUTH-NORTH_GRID_DIMENSION = 451 ;
+#                :BOTTOM-TOP_GRID_DIMENSION = 0 ;
+#                :WEST-EAST_PATCH_START_UNSTAG = 1 ;
+#                :WEST-EAST_PATCH_END_UNSTAG = 420 ;
+#                :WEST-EAST_PATCH_START_STAG = 1 ;
+#                :WEST-EAST_PATCH_END_STAG = 421 ;
+#                :SOUTH-NORTH_PATCH_START_UNSTAG = 1 ;
+#                :SOUTH-NORTH_PATCH_END_UNSTAG = 450 ;
+#                :SOUTH-NORTH_PATCH_START_STAG = 1 ;
+#                :SOUTH-NORTH_PATCH_END_STAG = 451 ;
+#                :GRIDTYPE = "C" ;
+#                :DX = 4000.f ;
+#                :DY = 4000.f ;
+#                :DYN_OPT = 2 ;
+#                :CEN_LAT = 63.90041f ;
+#                :CEN_LON = -152.2677f ;
+#                :TRUELAT1 = 64.f ;
+#                :TRUELAT2 = 1.e+20f ;
+#                :MOAD_CEN_LAT = 63.99999f ;
+#                :STAND_LON = -152.f ;
+#                :POLE_LAT = 90.f ;
+#                :POLE_LON = 0.f ;
+#                :corner_lats = 55.13433f, 70.42133f, 70.51836f, 55.18422f, 55.13046f, 70.41382f, 70.51104f, 55.18046f, 55.11752f, 70.43813f, 70.53525f, 55.16738f, 55.11366f, 70.43061f, 70.52792f, 55.16362f ;
+#                :corner_lons = -164.9492f, -176.0684f, -128.5916f, -139.4365f, -164.9786f, -176.1185f, -128.5409f, -139.407f, -164.9425f, -176.0908f, -128.5696f, -139.443f, -164.9718f, -176.141f, -128.519f, -139.4136f ;
+#                :MAP_PROJ = 2 ;
+#                :MMINLU = "MODIFIED_IGBP_MODIS_NOAH" ;
+#                :NUM_LAND_CAT = 21 ;
+#                :ISWATER = 17 ;
+#                :ISLAKE = 21 ;
+#                :ISICE = 15 ;
+#                :ISURBAN = 13 ;
+#                :ISOILWATER = 14 ;
+#                :grid_id = 2 ;
+#                :parent_id = 1 ;
+#                :i_parent_start = 68 ;
+#                :j_parent_start = 27 ;
+#                :i_parent_end = 207 ;
+#                :j_parent_end = 176 ;
+#                :parent_grid_ratio = 3 ;
+#                :sr_x = 1 ;
+#                :sr_y = 1 ;
+#                :FLAG_MF_XY = 1 ;
+#                :FLAG_LAI12M = 1 ;
+#                :FLAG_VAR_SSO = 1 ;
+#                :FLAG_LAKE_DEPTH = 1 ;
+
+
         # Obtain CRS for this WRF run
         MAP_PROJ = nc.MAP_PROJ
-        if MAP_PROJ != 1:
-            raise ValueError('WRF MAP_PROJ={} must be 1 (Lambert Concical LCC projection in PROJ.4).  Other values of MAP_PROJ are not supported'.format(MAP_PROJ))
-        wrf_crs = pyproj.CRS.from_string(f'+proj=lcc +lat_1={nc.TRUELAT1} +lat_2={nc.TRUELAT2} +lat_0={nc.CEN_LAT} +lon_0={nc.CEN_LON} +x_0=0 +y_0=0 +a=6370000 +b=6370000 +units=m +no_defs')
+        if MAP_PROJ == 1:
+            wrf_crs = pyproj.CRS.from_string(f'+proj=lcc +lat_1={nc.TRUELAT1} +lat_2={nc.TRUELAT2} +lat_0={nc.CEN_LAT} +lon_0={nc.CEN_LON} +x_0=0 +y_0=0 +a=6370000 +b=6370000 +units=m +no_defs')
+        elif MAP_PROJ == 2:
+            # https://wrf-python.readthedocs.io/en/develop/user_api/index.html#projection-subclasses
+            wrf_proj = wrf.PolarStereographic(truelat1=nc.TRUELAT1, stand_lon=nc.STAND_LON)
+            proj4_str = wrf_proj.proj4()
+            wrf_crs = pyproj.CRS.from_string(proj4_str)
+        else:
+            raise ValueError('WRF MAP_PROJ={} must be 1 or 2 (Lambert Concical LCC or Stereographic projection in PROJ.4).  Other values of MAP_PROJ are not supported'.format(MAP_PROJ))
 
 
     # Convert Gridcell centers from lon/lat to WRF's CRS
@@ -92,16 +164,31 @@ def wrf_info(geo_fname):
         np.mean(xx_m_wrf[:,0]) - .5*dx,    # edge of x-coord of origin (most westerly pixel)
         dx,                       # W-E pixel width
         0,                        # Row rotation
-        # Projected coordinate space is north-up; whereas raster space (for WRF) is north-down.
-        # Because those two are different, the 0.5 needs to have positive sign.
-        # (If the yare the same, then we would use -0.5*dy)
-        np.mean(yy_m_wrf[0,:]) + .5*dy,    # edge of y-coord of origin (most southerly pixel in this case)
+        ## Projected coordinate space is north-up; whereas raster space (for WRF) is north-down.
+        ## Because those two are different, the 0.5 needs to have positive sign.
+        ## (If the yare the same, then we would use -0.5*dy)
+        # (The above advice turned out to be wrong for WRF, it created an off-by-one error in the Y direction 2025-05-01)
+        np.mean(yy_m_wrf[0,:]) - .5*dy,    # edge of y-coord of origin (most southerly pixel in this case)
         0,                        # Column rotation
 
         dy]                       # N-S pixel resolution (negative val for north-up images)
 
-    return gisutil.RasterInfo(wrf_crs.to_wkt(), nji[1], nji[0], gt_wrf)
+    wrf_grid = gisutil.RasterInfo(wrf_crs.to_wkt(), nji[1], nji[0], gt_wrf)
 
+    # -----------------------------------------------------
+    # Now check that the grid can reproduce the lat/lon values
+    xy_x,xy_y = np.meshgrid(wrf_grid.centersx, wrf_grid.centersy)
+    proj = pyproj.Proj(wrf_grid.wkt) 
+    xy_lon, xy_lat = proj.transform(xy_x, xy_y, direction=pyproj.enums.TransformDirection.INVERSE)
+    max_err_lon = np.max(np.abs(xy_lon - lon_m))
+    max_err_lat = np.max(np.abs(xy_lat - lat_m))
+
+    # Lon/lat values in the files are to single precision (7 digits), between 0-180.
+    # Check that we match (almost) to that precision
+    if max(max_err_lon, max_err_lat) > 1.e-4:
+        raise ValueError(f'Something is wrong with setting up the WRF grid... the given grid does not match the original lon/lat values!  Maximum error is {max_error_lon} degrees in longitude and {max_err_lat} in latitude')
+
+    return wrf_grid
 
 def read_raw(data_fname, vname, units=None, fill_holes=False, keep_time=True):
     """Reads a WRF file with the corect geometry, etc.
@@ -140,7 +227,7 @@ def read_raw(data_fname, vname, units=None, fill_holes=False, keep_time=True):
 
 
 
-def read(data_fname, vname, geo_fname, units=None):
+def read(data_fname, vname, geo_fname, units=None, **kwargs):
     """Read WRF dataset with same return as gdalutil.read_raster()
     data_fname:
         Name of raw WRF NetCDF file
@@ -155,7 +242,7 @@ def read(data_fname, vname, geo_fname, units=None):
             Indicates no data for a gridcell in data
     """
     geo_info = wrf_info(geo_fname)
-    data,nodata_value = read_raw(data_fname, vname, units=units)
+    data,nodata_value = read_raw(data_fname, vname, units=units, **kwargs)
     return geo_info, data, nodata_value
 
 
