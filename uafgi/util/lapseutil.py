@@ -37,9 +37,6 @@ def compute_lapse(H, T, dy, dx):
     Hy,Hx = grad(H, dy, dx)
     Ty,Tx = grad(T, dy, dx)
 
-    return Hx*Hx + H*Hy
-
-    return np.divide(
-        Tx*Hx + Ty*Hy,
-        Hx*Hx + Hy*Hy)
-
+    slope2 = Hx*Hx + Hy*Hy
+    slope = np.sqrt(slope2)
+    return slope, np.divide(Tx*Hx + Ty*Hy, slope2)
