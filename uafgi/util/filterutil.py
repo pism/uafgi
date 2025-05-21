@@ -44,3 +44,41 @@ def nanfilter(U, sigma, truncate=4.0):
     Z=VV/WW
     return Z
 
+# ---------------------------------------------------------
+def extend_raster(ras, orig_mask_in=None, max_sigma=4):
+    """Extends a raster beyond its original bounds through successive Gaussian blurring.
+    ras:
+        The raster to extend
+    orig_mask_in: np.array(bool)
+        Do not extend beyond these gridcells
+    """
+
+    ras_final = ras.copy()
+    sigma = .25
+    while sigma <= max_sigma:
+        # Blur the image
+        rasx = nanfilter(ras, sigma, truncate=2.0)
+
+        # Find the gridcells we will update
+        mask_inx = np.logical_and(
+            np.isnan(ras_final),
+            np.logical_not(np.isnan(rasx)))
+
+        if orig_mask_in is not None:
+            mask_inx = np.logical_and(orig_mask_in, mask_inx)
+
+        # Update those gridcells
+        ras_final[mask_inx] = rasx[mask_inx]
+
+        ## Write output
+        #ofname = debug_dir / f'ras_{sigma:02.1f}.tif'
+        #gdalutil.write_raster(ofname, gridA, ras_final, -1000., type=gdal.GDT_Float32)
+
+        # Iterate
+        sigma *= 2
+
+    return ras_final
+#    ras = ras_final
+#    ras[ras<0] = 0
+#    gdalutil.write_raster(debug_dir / 'ras.tif', gridA, ras, acsnowA_nd, type=gdal.GDT_Float32)
+
