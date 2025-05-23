@@ -30,3 +30,11 @@ class MutableNamedTuple(collections.abc.Sequence):
         for key,val in kwargs.items():
             setattr(ret, key,val)
         return ret
+
+
+def eliminate_duplicates_inplace(combos):
+    # Eliminate duplicates while keeping original order
+    combos_set = {combo:None for combo in combos}
+    combos = list(combos_set.keys())
+    #combos_order = {combo : ix for ix,combo in enumerate(combos)}
+    return combos
