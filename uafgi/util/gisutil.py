@@ -1,7 +1,9 @@
 import functools,math
 import numpy as np
+import pandas as pd
 from osgeo import osr
 import shapely
+import geopandas
 from uafgi.util import shputil,ogrutil
 
 # Simple Cartesian CRS ("Ortographic")
@@ -406,6 +408,35 @@ class DomainGrid(RasterInfo):    # (gridD)
         grid.j0 = int(offsety / dy + 0.5)
 
         return grid
+
+    def intersecting_tiles(self, experiment_region):
+        """Finds sub-domains that intersect a partiular MultiPolygon
+
+        experiment_region: Shapely MultiPolygon
+            Read using ogrutil.read_multi_polygon()
+        Returns: GeoDataFrame
+            ix, iy: int
+                Coordinates of intersecting tiles
+            domain, domain_margin:
+                Polygons of intersecting tiles
+        """
+
+        # Compute the gridcells
+        rows = list()
+        for iy in range(0, self.ny):
+#            print(f'Computing domains iy={iy}')
+            for ix in range(0, self.nx):
+                domain = self.poly(ix, iy)
+                if domain.intersects(experiment_region):
+                    domain_margin = self.poly(ix, iy, margin=True)
+                    rows.append((ix,iy,domain,domain_margin))
+
+        df = pd.DataFrame(rows, columns=('idom', 'jdom', 'domain', 'domain_margin'))
+        df.idom = df.idom.astype('int32')
+        df.jdom = df.jdom.astype('int32')
+#        df = df.astype({'idom':'int', 'jdom':'int'})
+        df = geopandas.GeoDataFrame(df, geometry='domain')
+        return df
 
     @functools.lru_cache()
     def global_grid(self, dx, dy):

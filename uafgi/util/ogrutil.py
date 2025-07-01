@@ -103,6 +103,7 @@ def to_srs(wkt):
     srs.ImportFromWkt(wkt)
     return srs
 # ================= MOST EVERYTHING ABOVE THIS LINE IS OBSOLETE =====================
+# MOST EVERYTHING BELOW THIS LINE IS OBSOLETE TOO, USE GEOPANDAS
 # --------------------------------------------------------------------
 class Shapefile(typing.NamedTuple):
     df: pd.DataFrame    # Data from the shapefile (including shape col, if present)
@@ -238,7 +239,48 @@ def write_df(sf, ofname):
 #    layer = None
 #    ds = None
 
-# --------------------------------------------------------------------
-# --------------------------------------------------------------------
-# --------------------------------------------------------------------
 #https://pcjericks.github.io/py-gdalogr-cookbook/vector_layers.html#create-a-new-shapefile-and-add-data
+# --------------------------------------------------------------------
+def _ring_to_poly(ring):
+#    print('ring ', ring)
+    npoints = ring.GetPointCount()
+    points = list()
+    for p in range(0,npoints):
+        x,y,z = ring.GetPoint(p)
+        points.append(shapely.geometry.Point(x,y))
+#    print('len points ', len(points))
+    return shapely.geometry.Polygon(points)
+
+def read_multi_polygon(experiment_region_shp, driver='ESRI Shapefile'):
+    """Reads a polygon file as one giant Shapely MultiPolygon"""
+
+    # Load the experiment region and convert to Shapely Polygon
+    driver = ogr.GetDriverByName('ESRI Shapefile')
+    print('Opening shapefile ', experiment_region_shp)
+    src_ds = driver.Open(experiment_region_shp)
+    src_lyr = src_ds.GetLayer()   # Put layer number or name in her
+    polygons = list()
+    while True:
+        feature = src_lyr.GetNextFeature()
+        # If this is one big MultiPolygon there will be only ONLY feature
+        # If it is many Polygons, there will be MANY features.
+        if feature is None:
+            break
+
+        geom = feature.GetGeometryRef()
+        geom_name = geom.GetGeometryName()  # POLYGON OR MULTIPOLYGON
+        if geom_name == 'POLYGON':
+#            print('geocount ', geom.GetGeometryCount())
+            ring = geom.GetGeometryRef(0)
+            polygons.append(_ring_to_poly(ring))
+        else:    # Multi Polygon
+            npoly = geom.GetGeometryCount()
+            for ix in range(npoly):
+                ring = geom.GetGeometryRef(ix).GetGeometryRef(0)
+                polygons.append(_ring_to_poly(ring))
+
+    print('len polygons ', len(polygons))
+    experiment_region = shapely.geometry.MultiPolygon(polygons)
+    return experiment_region
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
