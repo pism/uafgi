@@ -35,8 +35,8 @@ class Stereographic(cartopy.crs.Projection):
         false_northing = proj4_dict['y_0']
 
         # TODO: Let the globe return the semimajor axis always.
-        a = np.float(self.globe.semimajor_axis or cartopy.crs.WGS84_SEMIMAJOR_AXIS)
-        b = np.float(self.globe.semiminor_axis or cartopy.crs.WGS84_SEMIMINOR_AXIS)
+        a = float(self.globe.semimajor_axis or cartopy.crs.WGS84_SEMIMAJOR_AXIS)
+        b = float(self.globe.semiminor_axis or cartopy.crs.WGS84_SEMIMINOR_AXIS)
 
         # Note: The magic number has been picked to maintain consistent
         # behaviour with a wgs84 globe. There is no guarantee that the scaling
