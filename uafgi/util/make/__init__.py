@@ -55,6 +55,9 @@ class Makefile(object):
         self.targets.clear()
 
     def add(self, rule):
+        if rule is None:
+            return
+
         # Don't add if already added
         all_outputs = True
         for output in rule.outputs:

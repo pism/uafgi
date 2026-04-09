@@ -484,6 +484,8 @@ def regrid(idata, igrid_info, inodata_value, ogrid_info, onodata_value, resample
 #    if dtype is not None:
 #        kwargs['dtype'] = dtype
     odata = np.zeros((ogrid_info.ny, ogrid_info.nx), dtype=idata.dtype)#**kwargs)
+    if onodata_value is not None:
+        odata[:] = onodata_value
     ods = gdal_array.OpenArray(odata)
     if onodata_value is not None:
         ods.GetRasterBand(1).SetNoDataValue(onodata_value)

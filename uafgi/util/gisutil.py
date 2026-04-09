@@ -1,4 +1,4 @@
-import functools,math
+import functools,math,os,subprocess
 import numpy as np
 import pandas as pd
 from osgeo import osr
@@ -273,8 +273,8 @@ class DomainGrid(RasterInfo):    # (gridD)
 
         # ----------------------------------------
         # Determine "domain geotransform" based on index_box
-        domain_size = domain_size
-        domain_margin = domain_margin
+#        domain_size = domain_size
+#        domain_margin = domain_margin
         xx,yy = index_box.exterior.coords.xy
         x0 = xx[0]
         x1 = xx[1]
@@ -427,7 +427,8 @@ class DomainGrid(RasterInfo):    # (gridD)
 #            print(f'Computing domains iy={iy}')
             for ix in range(0, self.nx):
                 domain = self.poly(ix, iy)
-                if domain.intersects(experiment_region):
+#                if domain.intersects(experiment_region):
+                if shapely.intersects(domain, experiment_region):
                     domain_margin = self.poly(ix, iy, margin=True)
                     rows.append((ix,iy,domain,domain_margin))
 
@@ -481,3 +482,30 @@ def offset_diff(igrid, ogrid):
 # ====================================================
 # From PISM
 # https://github.com/pism/pism/blob/main/util/fill_missing_petsc.py
+
+
+# --------------------------------------------------------------------------
+def build_vrt(rasters, ofname):
+    """Dynamically creates a virtual mosaic .vrt that encompasses given raster files.
+
+    """
+
+    cmd = ['gdalbuildvrt']
+
+    # No (known) need for -allow_projection_difference in this case.
+    # Tiles use the same projection, but named differently
+    # Error received: expected NAD83 / Alaska Albers, got NAD_1983_CORS96_Alaska_Albers
+    # Eg: ifsar/CELL_391/N5430W13200P/DTM_N5430W13200P.tif
+    # cmd.append('-allow_projection_difference')
+
+    # Include ALL appropriate snowfiles in the VRT, not just the
+    # snowfile(s) needed for now.
+    cmd.append(ofname)
+
+    cmd += rasters
+    cmd = [str(x) for x in cmd]
+    print(f'** Regenerating {ofname}')
+    os.makedirs(ofname.parents[0], exist_ok=True)
+    subprocess.run(cmd, check=True)
+
+    return ofname
