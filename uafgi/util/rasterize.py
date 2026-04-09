@@ -90,7 +90,7 @@ def rasterize_polygon_ij(poly, grid_info, debug=False):
 
     # ------------ Work in a smaller coord system ("Fast Burn")
     # Get oriented minimum bounding rectangle (MBR)
-    xx,yy = poly.exterior.coords.xy
+    xx,yy = poly.convex_hull.exterior.coords.xy
     minx = np.min(xx)
     maxx = np.max(xx)
     miny = np.min(yy)
