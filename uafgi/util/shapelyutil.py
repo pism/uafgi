@@ -8,6 +8,7 @@ import shapely.geometry
 shapely_to_ogr_type = {
     shapely.geometry.linestring.LineString: ogr.wkbLineString,
     shapely.geometry.polygon.Polygon: ogr.wkbPolygon,
+    shapely.geometry.multipolygon.MultiPolygon: ogr.wkbMultiPolygon,
 }
 
 
