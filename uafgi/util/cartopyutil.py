@@ -679,7 +679,7 @@ def plot_hillshade(ax, dem_data, extent=None, transform=None, cmap='Greys', **kw
     shaded = np.sin(altitude) * np.sin(slope)\
         + np.cos(altitude) * np.cos(slope)\
         * np.cos((azimuth - np.pi/2.) - aspect)
-    return plt.imshow(shaded, extent=extent, transform=transform,
+    return plt.imshow(shaded, extent=extent.xxyy, transform=transform,
         cmap=cmap, **kwargs)
 # -----------------------------------------------------------------
 def poly_clip_path(ax, mpoly):
@@ -723,3 +723,4 @@ def poly_clip_path(ax, mpoly):
 ##    for contour in originfig.collections:
 ##        contour.set_clip_path(clip)
 #    return clip
+

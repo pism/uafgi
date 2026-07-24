@@ -1,6 +1,23 @@
 import numpy as np
 import scipy.signal
 
+
+#@article{sobel19683x3,
+#  title={A 3x3 isotropic gradient operator for image processing (1968)},
+#  author={Sobel, Irwin and Feldman, Gary and others},
+#  journal={a talk at the Stanford Artificial Intelligence Project},
+#  year={1968}
+#}
+
+#History and Definition of the so-called "Sobel Operator",
+#more appropriately named the
+#Sobel-Feldman Operator
+#by Irwin Sobel
+#February 2, 2014
+#Updated June 14 2015
+#https://www.researchgate.net/profile/Irwin-Sobel/publication/285159837_A_33_isotropic_gradient_operator_for_image_processing/links/5af73f41aca2720af9cf6063/A-33-isotropic-gradient-operator-for-image-processing.pdf
+
+
 # eq 3
 Ox = np.array([
     [-1, -2, 0, 1, 2],

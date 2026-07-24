@@ -81,6 +81,28 @@ def invert_geotransform(gt_in):
 
 
 # -------------------------------------------------------------------------------
+def _swap_extent(xt):
+    """Swapes between xxyy and xyxy"""
+    return xt[0], xt[2], xt[1], xt[3]
+
+class Extent:
+    """Encapsulates an xyxy or xxyy"""
+    def __init__(self, x0,x1,x2,x3, order='xxyy'):
+        if order == 'xxyy':
+            self.xxyy = (x0,x1,x2,x3)
+        else:    # xyxy
+            self.xxyy = (x0,x2,x1,x3)
+
+    def __repr__(self):
+        sxxyy = [str(z) for z in self.xxyy]
+
+        return f"Extent({', '.join(sxxyy)}, 'xxyy')"
+
+    @property
+    def xyxy(self):
+        return _swap_extent(self.xxyy)
+
+# -------------------------------------------------------------------------------
 class RasterInfo:
     """Reads spatial extents from GDAL NetCDF raster file.
     Currently only works for NetCDF raster files.
@@ -182,11 +204,11 @@ class RasterInfo:
         if gt[5] < 0:
             y0,y1 = y1,y0
 
-
-        if order == 'xyxy':
-            return [x0,y0,x1,y1]
-        else:
-            return [x0,x1,y0,y1]
+        return Extent(x0,x1,y0,y1, order='xxyy')
+#        if order == 'xyxy':
+#            return [x0,y0,x1,y1]
+#        else:
+#            return [x0,x1,y0,y1]
 
 
     def to_xy(self, i, j, center=False):
@@ -509,3 +531,35 @@ def build_vrt(rasters, ofname):
     subprocess.run(cmd, check=True)
 
     return ofname
+# ----------------------------------------------------
+def transform_extent(iextent, icrs, ocrs):
+    """Creates a lonlat bounding box, from a bbox in a projection."""
+
+    # 3. Create arrays for the bounding box corners (x, y)
+    x_coords = np.array([iextent.xxyy[0], iextent.xxyy[1]])
+    y_coords = np.array([iextent.xxyy[2], iextent.xxyy[3]])
+
+    # Create a grid of all 4 corners to capture the true geometric boundaries
+    x_mesh, y_mesh = np.meshgrid(x_coords, y_coords)
+
+    # 4. Define the target lat/lon projection
+#    target_crs1 = ccrs.PlateCarree()
+
+    # 5. Transform the points from source projection to lat/lon
+    # Syntax: icrs.transform_points(ocrs, x, y)
+    transformed_points = ocrs.transform_points(icrs, x_mesh, y_mesh)
+
+    # 6. Extract the calculated longitudes and latitudes
+    longitudes = transformed_points[:, 0]
+    latitudes = transformed_points[:, 1]
+
+    # 7. Construct your new lat/lon bounding box
+    lon_min, lon_max = longitudes.min(), longitudes.max()
+    lat_min, lat_max = latitudes.min(), latitudes.max()
+
+    oextent = Extent(lon_min, lon_max, lat_min, lat_max, order='xxyy')
+    print('oextent ', oextent)
+    return oextent
+
+#    print(f"Lat/Lon Bounding Box: [{lon_min:.4f}, {lon_max:.4f}, {lat_min:.4f}, {lat_max:.4f}]")
+

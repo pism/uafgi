@@ -162,6 +162,17 @@ class Raster(typing.NamedTuple):
     nodata: object    # Nodata value
 
 
+def read_ds(ds, data=True):
+    grid_info = gisutil.RasterInfo(
+        ds.GetProjection(),
+        ds.RasterXSize, ds.RasterYSize,
+        np.array(ds.GetGeoTransform()))
+    band = ds.GetRasterBand(1)
+    nodata_value = band.GetNoDataValue()
+    _data = band.ReadAsArray() if data else None
+    return Raster(grid_info, _data, nodata_value)
+
+
 def read_raster(raster_file, data=True):
     """Simple way to read a raster file; and return it as a Numpy Array.
     Assumes single-band raster files (the usual case)
@@ -177,14 +188,21 @@ def read_raster(raster_file, data=True):
 
     raster_file = resolve_file(raster_file)
     ds = gdal.Open(str(raster_file))
-    grid_info = gisutil.RasterInfo(
-        ds.GetProjection(),
-        ds.RasterXSize, ds.RasterYSize,
-        np.array(ds.GetGeoTransform()))
-    band = ds.GetRasterBand(1)
-    nodata_value = band.GetNoDataValue()
-    _data = band.ReadAsArray() if data else None
-    return Raster(grid_info, _data, nodata_value)
+    return read_ds(ds, data=data)
+
+def cache_raster(raster_file, read_raster_fn):
+    """Returns: grid_info, data, nodata_value"""
+    if os.path.exists(raster_file):
+        print(f'Reading {raster_file}')
+        return read_raster(raster_file)
+    else:
+        print(f'Generating {raster_file}')
+        ret = read_raster_fn()
+        write_raster(raster_file, *ret)
+        return ret
+
+
+
 
 def raster_ds(raster):
     """Constructs an in-memory dataset from an in-memory array"""
@@ -614,9 +632,11 @@ def build_vrt(ifnames, ofname):
 
     # Include ALL appropriate ifnames in the VRT, not just the
     # snowfile(s) needed for now.
-    cmd.append(ofname)
+    cmd.append(ofname.parts[-1])
 #    cmd += [os.path.relpath(x, odir) for x in sorted(ifnames)]
     cmd += list(sorted(ifnames))
     print(f'** Regenerating {ofname}')
+    cmd = [str(x) for x in cmd]
+#    cmd = ' '.join(cmd)
     os.makedirs(odir, exist_ok=True)
     subprocess.run(cmd, cwd=odir, check=True)
