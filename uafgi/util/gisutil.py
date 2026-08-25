@@ -211,6 +211,24 @@ class RasterInfo:
 #            return [x0,x1,y0,y1]
 
 
+    def xy_to_ijr(self, x, y):
+        """Converts an (x,y) value to an (i,j) index into raster
+        NOTE: Similar to geoio.GeoImage.proj_to_raster()"""
+
+        # https://stackoverflow.com/questions/40464969/why-does-gdal-grid-turn-image-upside-down
+        GT = self.geoinv
+        ir = GT[0] + x*GT[1] + y*GT[2]
+        jr = GT[3] + x*GT[4] + y*GT[5]
+
+        return ir,jr
+
+    def ijr_to_xy(self, ir, jr):
+        GT = self.geotransform
+        Xgeo = GT[0] + ir*GT[1] + jr*GT[2]
+        Ygeo = GT[3] + ir*GT[4] + jr*GT[5]
+        return Xgeo,Ygeo
+
+
     def to_xy(self, i, j, center=False):
         """Converts an (i,j) pixel address to an (x,y) geographic value
         center:
@@ -259,6 +277,20 @@ class RasterInfo:
             return shapely.geometry.Polygon(coords)
         else:
             raise ValueError(f'Unknown shape type {type}')
+
+    def geopandas_grid(self):
+        """Creates a Geopandas dataframe consisteing of shapely.geometry.box polygons"""
+
+        rows = list()
+        for jj,yy in enumerate(np.arange(self.y0+self.dy, self.y1, self.dy)):
+            print(jj, yy)
+            for ii,xx in enumerate(np.arange(self.x0+self.dx, self.x1, self.dx)):
+                box = shapely.geometry.box(xx, yy, xx+self.dx, yy+self.dy)
+                rows.append((jj, ii, box))
+
+        df = geopandas.GeoDataFrame(rows, columns=['jj', 'ii', geometry], geometry='geometry', crs=self.wkt)
+        return df    
+
 
 
 class DomainGrid(RasterInfo):    # (gridD)

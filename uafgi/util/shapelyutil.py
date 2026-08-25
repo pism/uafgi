@@ -64,3 +64,11 @@ def add_margin(p,margin):
     p = shapely.geometry.Polygon(list(zip(pts[:-1,0], pts[:-1,1])))
     return p
 # -----------------------------------------------------------
+def to_affine(GT):
+
+    # Reorder Geotransform for Shapely affine transform
+#    a, b, xoff, d, e, yoff = GT
+    xoff, a, b, yoff, d, e = GT
+    trans = (a, b, d, e, xoff, yoff)
+
+    return trans
